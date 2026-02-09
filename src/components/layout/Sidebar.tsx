@@ -117,6 +117,41 @@ export const Sidebar: React.FC<{
         )}
       </nav>
 
+      <div className="sidebar-quick-info">
+        <div className="quick-info-header">
+          <span>📊 Resumen Rápido</span>
+        </div>
+        <div className="quick-stats">
+          <div className="quick-stat-item">
+            <div className="stat-value">24</div>
+            <div className="stat-label">Documentos</div>
+          </div>
+          <div className="quick-stat-item">
+            <div className="stat-value">8</div>
+            <div className="stat-label">Tareas Hoy</div>
+          </div>
+          <div className="quick-stat-item">
+            <div className="stat-value">$1.2M</div>
+            <div className="stat-label">En Proceso</div>
+          </div>
+        </div>
+        <div className="quick-info-section">
+          <div className="info-section-title">Actividad Reciente</div>
+          <div className="activity-item">
+            <div className="activity-dot"></div>
+            <div className="activity-text">Boletín #156 aprobado</div>
+          </div>
+          <div className="activity-item">
+            <div className="activity-dot"></div>
+            <div className="activity-text">OC-2024-89 recibida</div>
+          </div>
+          <div className="activity-item">
+            <div className="activity-dot"></div>
+            <div className="activity-text">3 docs pendientes</div>
+          </div>
+        </div>
+      </div>
+
       <div className="sidebar-footer">
         <button onClick={logout} className="logout-button">
           Cerrar Sesión

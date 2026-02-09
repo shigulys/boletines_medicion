@@ -718,6 +718,42 @@ export const BoletinMedicion: React.FC = () => {
                   </table>
                 </div>
               ))}
+              
+              {/* Total General de Órdenes */}
+              {filteredTxs.length > 0 && (
+                <div style={{ 
+                  marginTop: '30px', 
+                  padding: '20px 30px', 
+                  background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
+                  borderRadius: '12px',
+                  border: '2px solid #1976d2',
+                  boxShadow: '0 4px 12px rgba(25,118,210,0.15)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: '1.2rem', color: '#0d47a1' }}>
+                        📊 Resumen Total de Órdenes
+                      </h4>
+                      <p style={{ margin: 0, color: '#1565c0', fontSize: '0.9rem' }}>
+                        {filteredTxs.length} {filteredTxs.length === 1 ? 'orden generada' : 'órdenes generadas'}
+                      </p>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.85rem', color: '#1565c0', marginBottom: '5px' }}>
+                        Monto Total Acumulado
+                      </div>
+                      <div style={{ 
+                        fontSize: '2rem', 
+                        fontWeight: '700', 
+                        color: '#0d47a1',
+                        letterSpacing: '-0.5px'
+                      }}>
+                        ${formatCurrency(filteredTxs.reduce((sum, tx) => sum + tx.TotalAmount, 0))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               </>
               )}
             </div>

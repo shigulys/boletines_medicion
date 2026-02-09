@@ -43,20 +43,101 @@ function App() {
             <section className="dashboard-grid">
               {user?.accessIngenieria && (
                 <div className="dashboard-card">
-                  <h3>Resumen de Ingeniería</h3>
-                  <p>No hay tareas pendientes para hoy.</p>
+                  <div className="dashboard-card-header">
+                    <div className="dashboard-card-icon">📋</div>
+                    <h3>Ingeniería</h3>
+                  </div>
+                  <div className="dashboard-card-metric">12</div>
+                  <div className="dashboard-card-label">Tareas en progreso</div>
+                  <div className="dashboard-card-progress">
+                    <div className="progress-label">
+                      <span>Avance semanal</span>
+                      <span>75%</span>
+                    </div>
+                    <div className="progress-bar-container">
+                      <div className="progress-bar" style={{width: '75%'}}></div>
+                    </div>
+                  </div>
+                  <div className="dashboard-card-footer">
+                    <div className="footer-stat">
+                      <div className="footer-stat-value">8</div>
+                      <div className="footer-stat-label">Planos</div>
+                    </div>
+                    <div className="footer-stat">
+                      <div className="footer-stat-value">24</div>
+                      <div className="footer-stat-label">Revisiones</div>
+                    </div>
+                    <div className="footer-stat">
+                      <div className="footer-stat-value">3</div>
+                      <div className="footer-stat-label">Pendientes</div>
+                    </div>
+                  </div>
                 </div>
               )}
               {user?.accessSubcontratos && (
                 <div className="dashboard-card">
-                  <h3>Subcontratos Activos</h3>
-                  <p>8 subcontratos en ejecución.</p>
+                  <div className="dashboard-card-header">
+                    <div className="dashboard-card-icon">👷</div>
+                    <h3>Subcontratos</h3>
+                  </div>
+                  <div className="dashboard-card-metric">8</div>
+                  <div className="dashboard-card-label">Contratos en ejecución</div>
+                  <div className="dashboard-card-progress">
+                    <div className="progress-label">
+                      <span>Cumplimiento</span>
+                      <span>92%</span>
+                    </div>
+                    <div className="progress-bar-container">
+                      <div className="progress-bar" style={{width: '92%'}}></div>
+                    </div>
+                  </div>
+                  <div className="dashboard-card-footer">
+                    <div className="footer-stat">
+                      <div className="footer-stat-value">$2.4M</div>
+                      <div className="footer-stat-label">Valor Total</div>
+                    </div>
+                    <div className="footer-stat">
+                      <div className="footer-stat-value">5</div>
+                      <div className="footer-stat-label">Activos</div>
+                    </div>
+                    <div className="footer-stat">
+                      <div className="footer-stat-value">3</div>
+                      <div className="footer-stat-label">Finalizando</div>
+                    </div>
+                  </div>
                 </div>
               )}
               {user?.accessContabilidad && (
                 <div className="dashboard-card">
-                  <h3>Estado Contable</h3>
-                  <p>Presupuesto ejecutado al 45%.</p>
+                  <div className="dashboard-card-header">
+                    <div className="dashboard-card-icon">💰</div>
+                    <h3>Contabilidad</h3>
+                  </div>
+                  <div className="dashboard-card-metric">45%</div>
+                  <div className="dashboard-card-label">Presupuesto ejecutado</div>
+                  <div className="dashboard-card-progress">
+                    <div className="progress-label">
+                      <span>$5.2M de $11.5M</span>
+                      <span>45%</span>
+                    </div>
+                    <div className="progress-bar-container">
+                      <div className="progress-bar" style={{width: '45%'}}></div>
+                    </div>
+                  </div>
+                  <div className="dashboard-card-footer">
+                    <div className="footer-stat">
+                      <div className="footer-stat-value">156</div>
+                      <div className="footer-stat-label">Facturas</div>
+                    </div>
+                    <div className="footer-stat">
+                      <div className="footer-stat-value">$1.2M</div>
+                      <div className="footer-stat-label">Por Pagar</div>
+                    </div>
+                    <div className="footer-stat">
+                      <div className="footer-stat-value">12</div>
+                      <div className="footer-stat-label">Pendientes</div>
+                    </div>
+                  </div>
                 </div>
               )}
             </section>
