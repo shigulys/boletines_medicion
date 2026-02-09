@@ -143,17 +143,34 @@ export const BoletinMedicion: React.FC = () => {
 
   const fetchTransactions = async () => {
     setLoading(true);
+    setError('');
     try {
+      const token = localStorage.getItem('token');
+      console.log('🔑 Fetching transactions with token:', token ? 'Present' : 'Missing');
+      
       const response = await fetch('http://localhost:5000/api/admcloud/transactions', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         }
       });
+      
+      console.log('📡 Response status:', response.status);
+      
       if (response.ok) {
-        setTransactions(await response.json());
+        const data = await response.json();
+        console.log('✅ Transactions loaded:', data.length);
+        setTransactions(data);
+        if (data.length === 0) {
+          setError('No se encontraron órdenes de compra en AdmCloud');
+        }
+      } else {
+        const errorData = await response.text();
+        console.error('❌ Error response:', errorData);
+        setError(`Error ${response.status}: ${errorData}`);
       }
-    } catch {
-      setError('Error al conectar con el servidor');
+    } catch (err) {
+      console.error('❌ Fetch error:', err);
+      setError('Error al conectar con el servidor. Verifica que el backend esté corriendo.');
     } finally {
       setLoading(false);
     }
@@ -488,8 +505,11 @@ export const BoletinMedicion: React.FC = () => {
 
   return (
     <div className="boletin-container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2>Boletín de Medición y Solicitud de Pago</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '10px 0' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '2rem', fontWeight: '700', color: '#1976d2' }}>Boletín de Medición y Solicitud de Pago</h2>
+          <p style={{ margin: '5px 0 0 0', color: '#666', fontSize: '0.95rem' }}>Gestión de cubicaciones y solicitudes de pago</p>
+        </div>
         {!isNewTab && (
           <button className="btn-small" onClick={() => setViewHistory(!viewHistory)}>
             {viewHistory ? 'Volver al Formulario' : 'Ver Historial de Boletines'}
@@ -499,63 +519,70 @@ export const BoletinMedicion: React.FC = () => {
 
       {viewHistory && !isNewTab ? (
         <div className="card history-card">
-          <h3>Historial de Boletines Generados</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+            <h2 style={{ margin: 0, fontSize: '1.8rem', color: '#1976d2' }}>Historial de Boletines Generados</h2>
+            <span style={{ fontSize: '1rem', color: '#666', fontWeight: '500' }}>
+              Total: <strong style={{ color: '#1976d2' }}>{savedBoletines.length}</strong> boletines
+            </span>
+          </div>
           <div className="table-responsive">
-            <table className="data-table">
+            <table className="data-table history-table">
               <thead>
                 <tr>
-                  <th>N° Boletín</th>
-                  <th>Fecha</th>
-                  <th style={{ minWidth: '200px' }}>Proyecto</th>
-                  <th>Ref (OC / Rec.)</th>
-                  <th>Proveedor</th>
-                  <th style={{ textAlign: 'right' }}>Neto Pagado</th>
-                  <th>Estado</th>
-                  <th style={{ minWidth: '220px', textAlign: 'center' }}>Acciones</th>
+                  <th style={{ minWidth: '160px', width: '10%' }}>N° BOLETÍN</th>
+                  <th style={{ minWidth: '110px', width: '8%' }}>FECHA</th>
+                  <th style={{ minWidth: '200px', width: '18%' }}>PROYECTO</th>
+                  <th style={{ minWidth: '140px', width: '10%' }}>REF (OC / REC)</th>
+                  <th style={{ minWidth: '180px', width: '15%' }}>PROVEEDOR</th>
+                  <th style={{ minWidth: '140px', width: '10%', textAlign: 'right' }}>NETO PAGADO</th>
+                  <th style={{ minWidth: '120px', width: '8%', textAlign: 'center' }}>ESTADO</th>
+                  <th style={{ minWidth: '280px', width: '21%', textAlign: 'center' }}>ACCIONES</th>
                 </tr>
               </thead>
               <tbody>
                 {savedBoletines.map(b => (
                   <tr key={b.id}>
-                    <td><strong>{b.docNumber}</strong></td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{new Date(b.date).toLocaleDateString('es-ES')}</td>
+                    <td><strong style={{ fontSize: '1rem', color: '#1976d2' }}>{b.docNumber}</strong></td>
+                    <td style={{ whiteSpace: 'nowrap', fontSize: '0.95rem' }}>{new Date(b.date).toLocaleDateString('es-ES')}</td>
                     <td>
-                      <div className="project-cell" title={b.projectName}>
+                      <div className="project-cell-large" title={b.projectName}>
                         {b.projectName || 'General'}
                       </div>
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>
-                      <div style={{ fontSize: '0.85rem' }}>{b.docID}</div>
+                      <div style={{ fontSize: '0.95rem', fontWeight: '600', color: '#333' }}>{b.docID}</div>
                       {b.receptionNumbers && (
-                        <div style={{ fontSize: '0.7rem', color: '#666' }}>Rec: {b.receptionNumbers}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '3px' }}>Rec: {b.receptionNumbers}</div>
                       )}
                     </td>
                     <td>
-                      <div className="vendor-cell" title={b.vendorName}>
+                      <div className="vendor-cell-large" title={b.vendorName}>
                         {b.vendorName}
                       </div>
                     </td>
-                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>${formatCurrency(b.netTotal)}</td>
-                    <td>
-                      <span className={`status-badge status-${b.status.toLowerCase()}`}>
+                    <td style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '1rem', color: '#28a745' }}>${formatCurrency(b.netTotal)}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <span className={`status-badge-large status-${b.status.toLowerCase()}`}>
                         {b.status}
                       </span>
                     </td>
                     <td>
-                      <div className="action-buttons-container">
-                        <button className="btn-action btn-pdf" onClick={() => generatePDF(b)}>PDF</button>
+                      <div className="action-buttons-container-large">
+                        <button className="btn-action-large btn-pdf" onClick={() => generatePDF(b)}>
+                          <span>📄</span> PDF
+                        </button>
                         {b.status === "PENDIENTE" && (
                           <>
-                            <button className="btn-action btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
-                              Editar
+                            <button className="btn-action-large btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
+                              <span>✏️</span> Editar
                             </button>
                             {(user?.role === 'admin' || user?.accessContabilidad) && (
-                              <div className="approval-group">
-                                <button className="btn-action btn-approve" onClick={() => handleStatusChange(b.id, 'APROBADO')}>
-                                  Aprobar
+                              <div className="approval-group-large">
+                                <button className="btn-action-large btn-approve" onClick={() => handleStatusChange(b.id, 'APROBADO')}>
+                                  <span>✓</span> Aprobar
                                 </button>
-                                <button className="btn-action btn-reject" onClick={() => handleStatusChange(b.id, 'RECHAZADO')}>
-                                  Rechazar
+                                <button className="btn-action-large btn-reject" onClick={() => handleStatusChange(b.id, 'RECHAZADO')}>
+                                  <span>✕</span> Rechazar
                                 </button>
                               </div>
                             )}
@@ -571,34 +598,34 @@ export const BoletinMedicion: React.FC = () => {
         </div>
       ) : !selectedTx ? (
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
-            <h3 style={{ margin: 0 }}>Seleccione una Orden de Compra (AdmCloud)</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '20px' }}>
+            <h3 style={{ margin: 0, fontSize: '1.5rem', color: '#1976d2' }}>Seleccione una Orden de Compra (AdmCloud)</h3>
             <div className="filter-group" style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '0.8rem', color: '#666' }}>Desde:</span>
+                <span style={{ fontSize: '0.9rem', color: '#666', fontWeight: '500' }}>Desde:</span>
                 <input 
                   type="date" 
                   value={startDate} 
                   onChange={(e) => setStartDate(e.target.value)}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #ddd' }}
+                  style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '0.9rem' }}
                 />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '0.8rem', color: '#666' }}>Hasta:</span>
+                <span style={{ fontSize: '0.9rem', color: '#666', fontWeight: '500' }}>Hasta:</span>
                 <input 
                   type="date" 
                   value={endDate} 
                   onChange={(e) => setEndDate(e.target.value)}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #ddd' }}
+                  style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '0.9rem' }}
                 />
               </div>
-              <div className="search-box" style={{ width: '300px' }}>
+              <div className="search-box" style={{ width: '350px' }}>
                 <input 
                   type="text" 
                   placeholder="Buscar OC, Proveedor o Proyecto..." 
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  style={{ width: '100%', padding: '8px 15px', borderRadius: '25px', border: '1px solid #ddd', outline: 'none', fontSize: '0.85rem' }}
+                  style={{ width: '100%', padding: '10px 18px', borderRadius: '25px', border: '1px solid #ddd', outline: 'none', fontSize: '0.95rem' }}
                 />
               </div>
               <button 
@@ -610,43 +637,79 @@ export const BoletinMedicion: React.FC = () => {
             </div>
           </div>
 
+          {error && (
+            <div style={{ 
+              background: '#f8d7da', 
+              border: '1px solid #f5c6cb', 
+              color: '#721c24', 
+              padding: '15px', 
+              borderRadius: '6px', 
+              marginTop: '15px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+              <div>
+                <strong>Error:</strong> {error}
+                <br />
+                <small>Abre la consola del navegador (F12) para más detalles</small>
+              </div>
+            </div>
+          )}
+
           {loading ? <div className="loading-spinner">Cargando órdenes de compra de AdmCloud...</div> : (
             <div className="table-responsive">
+              {Object.keys(groupedTransactions).length === 0 ? (
+                <div style={{ 
+                  textAlign: 'center', 
+                  padding: '40px', 
+                  background: '#f8f9fa', 
+                  borderRadius: '8px',
+                  color: '#666'
+                }}>
+                  <span style={{ fontSize: '3rem' }}>📦</span>
+                  <h3>No hay órdenes de compra</h3>
+                  <p>No se encontraron órdenes que coincidan con los filtros aplicados</p>
+                </div>
+              ) : (
+              <>
               {Object.entries(groupedTransactions).map(([projectName, txs]) => (
-                <div key={projectName} style={{ marginBottom: '35px' }}>
+                <div key={projectName} style={{ marginBottom: '40px' }}>
                   <h4 style={{ 
-                    background: '#f8f9fa', 
-                    padding: '12px 20px', 
-                    borderRadius: '8px', 
+                    background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', 
+                    padding: '16px 24px', 
+                    borderRadius: '10px', 
                     borderLeft: '5px solid #1976d2',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+                    marginBottom: '15px'
                   }}>
-                    <span>Proyecto: <strong>{projectName}</strong></span>
-                    <span style={{ fontSize: '0.8rem', background: '#e3f2fd', color: '#1976d2', padding: '4px 12px', borderRadius: '15px', fontWeight: 'bold' }}>
-                      {txs.length} {txs.length === 1 ? 'Orden' : 'Ordenes'}
+                    <span style={{ fontSize: '1.1rem' }}>Proyecto: <strong>{projectName}</strong></span>
+                    <span style={{ fontSize: '0.9rem', background: '#e3f2fd', color: '#1976d2', padding: '6px 16px', borderRadius: '20px', fontWeight: 'bold' }}>
+                      {txs.length} {txs.length === 1 ? 'Orden' : 'Órdenes'}
                     </span>
                   </h4>
-                  <table className="data-table">
+                  <table className="data-table oc-table">
                     <thead>
                       <tr>
-                        <th>Doc ID</th>
-                        <th>Proveedor</th>
-                        <th>Fecha OC</th>
-                        <th>Total OC</th>
-                        <th>Acción</th>
+                        <th style={{ width: '15%' }}>DOC ID</th>
+                        <th style={{ width: '35%' }}>PROVEEDOR</th>
+                        <th style={{ width: '15%' }}>FECHA OC</th>
+                        <th style={{ width: '20%', textAlign: 'right' }}>TOTAL OC</th>
+                        <th style={{ width: '15%', textAlign: 'center' }}>ACCIÓN</th>
                       </tr>
                     </thead>
                     <tbody>
                       {txs.map(tx => (
                         <tr key={tx.ID}>
-                          <td>{tx.DocID}</td>
+                          <td style={{ fontWeight: '600', color: '#1976d2' }}>{tx.DocID}</td>
                           <td>{tx.VendorName}</td>
-                          <td>{new Date(tx.DocDate).toLocaleDateString('es-ES')}</td>
-                          <td>${formatCurrency(tx.TotalAmount)}</td>
-                          <td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{new Date(tx.DocDate).toLocaleDateString('es-ES')}</td>
+                          <td style={{ textAlign: 'right', fontWeight: '600', color: '#28a745' }}>${formatCurrency(tx.TotalAmount)}</td>
+                          <td style={{ textAlign: 'center' }}>
                             <button className="btn-small" onClick={() => window.open(`/?generateBoletin=${tx.ID}`, '_blank')}>Seleccionar</button>
                           </td>
                         </tr>
@@ -655,6 +718,8 @@ export const BoletinMedicion: React.FC = () => {
                   </table>
                 </div>
               ))}
+              </>
+              )}
             </div>
           )}
         </div>
@@ -835,24 +900,132 @@ export const BoletinMedicion: React.FC = () => {
       )}
 
       <style>{`
-        .boletin-container { padding: 20px; max-width: 1400px; margin: 0 auto; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; }
-        .history-card { width: 100%; overflow-x: auto; }
+        .boletin-container { padding: 15px; max-width: 100%; margin: 0 auto; width: 100%; }
+        .card { background: white; padding: 24px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden; }
+        .history-card { width: 100%; overflow-x: auto; padding: 30px; }
         .table-responsive { width: 100%; overflow-x: auto; margin-top: 20px; }
-        .data-table { width: 100%; border-collapse: collapse; min-width: 1000px; }
+        .data-table { width: 100%; border-collapse: collapse; min-width: 1200px; font-size: 0.95rem; }
+        
+        /* Optimización para pantallas 24" */
+        @media (min-width: 1600px) {
+          .boletin-container { padding: 20px 30px; }
+          .data-table { font-size: 1rem; }
+        }
         .data-table th { background: #f8f9fa; color: #333; font-weight: 600; text-transform: uppercase; font-size: 0.85rem; }
         .data-table th, .data-table td { padding: 12px 15px; border-bottom: 1px solid #eee; text-align: left; }
         
+        /* Estilos optimizados para tabla de historial en pantallas grandes */
+        .history-table thead th { 
+          background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%); 
+          color: white; 
+          font-weight: 700; 
+          text-transform: uppercase; 
+          font-size: 0.8rem;
+          letter-spacing: 0.5px;
+          padding: 14px 16px;
+          position: sticky;
+          top: 0;
+          z-index: 10;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .history-table tbody td { 
+          padding: 14px 16px; 
+          font-size: 0.95rem;
+          border-bottom: 1px solid #e8e8e8;
+        }
+        
+        /* Estilos para tabla de órdenes de compra */
+        .oc-table thead th {
+          background: #f8f9fa;
+          color: #333;
+          font-weight: 600;
+          text-transform: uppercase;
+          font-size: 0.8rem;
+          padding: 14px 16px;
+          border-bottom: 2px solid #1976d2;
+        }
+        
+        .oc-table tbody td {
+          padding: 14px 16px;
+          font-size: 0.95rem;
+        }
+        
+        .oc-table tbody tr:hover {
+          background-color: #f8f9ff;
+          box-shadow: 0 2px 4px rgba(25, 118, 210, 0.08);
+        }
+        
+        @media (min-width: 1920px) {
+          .history-table thead th {
+            font-size: 0.85rem;
+            padding: 16px 20px;
+          }
+          .history-table tbody td {
+            padding: 16px 20px;
+            font-size: 1rem;
+          }
+          .oc-table thead th {
+            font-size: 0.85rem;
+            padding: 16px 20px;
+          }
+          .oc-table tbody td {
+            padding: 16px 20px;
+            font-size: 1rem;
+          }
+        }
+        
+        .history-table tbody tr { 
+          transition: all 0.2s ease;
+        }
+        
+        .history-table tbody tr:hover { 
+          background-color: #f8f9ff;
+          box-shadow: 0 2px 8px rgba(25, 118, 210, 0.1);
+        }
+        
         .project-cell, .vendor-cell { 
-          max-width: 250px; 
+          max-width: 280px; 
           overflow: hidden; 
           text-overflow: ellipsis; 
           white-space: nowrap; 
           font-size: 0.9rem;
         }
+        
+        .project-cell-large, .vendor-cell-large { 
+          max-width: 400px; 
+          overflow: hidden; 
+          text-overflow: ellipsis; 
+          white-space: nowrap; 
+          font-size: 0.95rem;
+          font-weight: 500;
+          color: #333;
+        }
+        
+        @media (min-width: 1920px) {
+          .project-cell-large, .vendor-cell-large {
+            max-width: 500px;
+            font-size: 1rem;
+          }
+        }
 
         .action-buttons-container { display: flex; gap: 8px; align-items: center; justify-content: center; }
+        .action-buttons-container-large { 
+          display: flex; 
+          gap: 10px; 
+          align-items: center; 
+          justify-content: center;
+          flex-wrap: wrap;
+        }
+        
         .approval-group { display: flex; gap: 5px; border-left: 1px solid #ddd; padding-left: 8px; }
+        .approval-group-large { 
+          display: flex; 
+          gap: 8px; 
+          border-left: 2px solid #e0e0e0; 
+          padding-left: 10px; 
+          margin-left: 4px;
+        }
         
         .btn-action { 
           padding: 6px 12px; 
@@ -864,21 +1037,109 @@ export const BoletinMedicion: React.FC = () => {
           transition: all 0.2s ease;
         }
         
+        .btn-action-large { 
+          padding: 8px 16px; 
+          border: none; 
+          border-radius: 6px; 
+          cursor: pointer; 
+          font-weight: 600; 
+          font-size: 0.85rem;
+          transition: all 0.2s ease;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          white-space: nowrap;
+        }
+        
+        .btn-action-large span {
+          font-size: 1rem;
+        }
+        
         .btn-pdf { background: #6c757d; color: white; }
         .btn-edit { background: #f0ad4e; color: white; }
         .btn-approve { background: #28a745; color: white; }
         .btn-reject { background: #d9534f; color: white; }
         
         .btn-action:hover { opacity: 0.85; transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .btn-action-large:hover { 
+          transform: translateY(-2px); 
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+        }
+        
+        .btn-action-large:active { 
+          transform: translateY(0); 
+        }
 
-        .btn-small { padding: 5px 10px; cursor: pointer; }
+        .btn-small { 
+          padding: 8px 16px; 
+          cursor: pointer; 
+          background: #1976d2; 
+          color: white; 
+          border: none; 
+          border-radius: 6px; 
+          font-weight: 600; 
+          font-size: 0.9rem;
+          transition: all 0.2s ease;
+        }
+        
+        .btn-small:hover {
+          background: #1565c0;
+          transform: translateY(-1px);
+          box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+        }
+        
         .btn-primary { background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
         .amount-preview { color: #d32f2f; font-weight: bold; font-size: 0.9rem; }
+        
         .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+        .status-badge-large { 
+          padding: 8px 16px; 
+          border-radius: 25px; 
+          font-size: 0.8rem; 
+          font-weight: 700; 
+          text-transform: uppercase;
+          display: inline-block;
+          min-width: 100px;
+          text-align: center;
+        }
+        
         .status-pendiente { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
         .status-aprobado { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .status-rechazado { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         input[type="number"], select { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        
+        /* Asegurar texto visible en todas las tablas */
+        .boletin-container * {
+          color: inherit;
+        }
+        
+        .data-table td {
+          color: #333 !important;
+          font-size: 0.95rem;
+        }
+        
+        .data-table tbody td {
+          background-color: white;
+        }
+        
+        .data-table tbody tr:hover td {
+          background-color: #f8f9ff;
+        }
+        
+        h2, h3, h4 {
+          color: #1a1a1a;
+        }
+        
+        button {
+          color: inherit;
+        }
+        
+        .loading-spinner {
+          text-align: center;
+          padding: 40px;
+          font-size: 1.1rem;
+          color: #1976d2;
+        }
       `}</style>
     </div>
   );
