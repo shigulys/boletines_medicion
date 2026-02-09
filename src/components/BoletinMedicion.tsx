@@ -55,6 +55,7 @@ export const BoletinMedicion: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [filterSubcontratos, setFilterSubcontratos] = useState(false);
 
   // Boletin Logic State
   const [linesToPay, setLinesToPay] = useState<any[]>([]);
@@ -72,7 +73,7 @@ export const BoletinMedicion: React.FC = () => {
     fetchBoletinHistory();
     const params = new URLSearchParams(window.location.search);
     setIsNewTab(params.has('editBoletin') || params.has('generateBoletin'));
-  }, []);
+  }, [filterSubcontratos]);
 
   // Nuevo: Efecto para detectar edición o generación desde la URL (abre en nuevo tab)
   useEffect(() => {
@@ -147,8 +148,17 @@ export const BoletinMedicion: React.FC = () => {
     try {
       const token = localStorage.getItem('token');
       console.log('🔑 Fetching transactions with token:', token ? 'Present' : 'Missing');
+      console.log('🔍 filterSubcontratos:', filterSubcontratos);
       
-      const response = await fetch('http://localhost:5000/api/admcloud/transactions', {
+      const url = new URL('http://localhost:5000/api/admcloud/transactions');
+      if (filterSubcontratos) {
+        url.searchParams.append('departmentFilter', 'subcontratos');
+        console.log('✅ Agregando filtro de Subcontratos a la URL');
+      }
+      
+      console.log('📡 URL final:', url.toString());
+      
+      const response = await fetch(url.toString(), {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -159,6 +169,9 @@ export const BoletinMedicion: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         console.log('✅ Transactions loaded:', data.length);
+        if (filterSubcontratos) {
+          console.log('🔍 Filtro Subcontratos ACTIVO - Documentos recibidos:', data.map((t: any) => t.DocID));
+        }
         setTransactions(data);
         if (data.length === 0) {
           setError('No se encontraron órdenes de compra en AdmCloud');
@@ -311,9 +324,9 @@ export const BoletinMedicion: React.FC = () => {
 
     // Recopilar números de recepción únicos de las líneas seleccionadas
     const selectedReceptionSet = new Set<string>();
-    linesToPay.forEach((line, idx) => {
-      if (line.selected && items[idx]?.ReceptionNumbers) {
-        items[idx].ReceptionNumbers.split(',').forEach((r: string) => {
+    linesToPay.forEach((line) => {
+      if (line.selected && line.receptionNumbers) {
+        line.receptionNumbers.split(',').forEach((r: string) => {
           if (r.trim()) selectedReceptionSet.add(r.trim());
         });
       }
@@ -598,7 +611,7 @@ export const BoletinMedicion: React.FC = () => {
         </div>
       ) : !selectedTx ? (
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '20px' }}>
             <h3 style={{ margin: 0, fontSize: '1.5rem', color: '#1976d2' }}>Seleccione una Orden de Compra (AdmCloud)</h3>
             <div className="filter-group" style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -628,14 +641,47 @@ export const BoletinMedicion: React.FC = () => {
                   style={{ width: '100%', padding: '10px 18px', borderRadius: '25px', border: '1px solid #ddd', outline: 'none', fontSize: '0.95rem' }}
                 />
               </div>
+              {user?.accessSubcontratos && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: filterSubcontratos ? '#fff3e0' : '#f5f5f5', padding: '8px 15px', borderRadius: '6px', border: filterSubcontratos ? '1px solid #fb8c00' : '1px solid #ddd', fontSize: '0.9rem', fontWeight: '500' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={filterSubcontratos}
+                    onChange={(e) => setFilterSubcontratos(e.target.checked)}
+                    style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                  />
+                  <span>🔍 Solo Subcontratos</span>
+                </label>
+              )}
               <button 
-                onClick={() => { setSearchTerm(''); setStartDate(''); setEndDate(''); }}
+                onClick={() => { setSearchTerm(''); setStartDate(''); setEndDate(''); setFilterSubcontratos(false); }}
                 style={{ background: '#eee', border: 'none', padding: '8px 15px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}
               >
                 Limpiar
               </button>
             </div>
           </div>
+
+          {/* Indicador de filtro activo */}
+          {filterSubcontratos && user?.accessSubcontratos && (
+            <div style={{ 
+              marginBottom: '20px', 
+              padding: '12px 18px', 
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              fontSize: '0.9rem',
+              background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+              border: '1px solid #fb8c00',
+              color: '#333'
+            }}>
+              <span style={{ fontSize: '1.2rem' }}>🔍</span>
+              <div>
+                <strong>Filtro Activo: </strong>
+                Mostrando únicamente órdenes del departamento de Subcontratos
+              </div>
+            </div>
+          )}
 
           {error && (
             <div style={{ 
@@ -779,15 +825,15 @@ export const BoletinMedicion: React.FC = () => {
             <p><strong>Proyecto:</strong> {selectedTx.ProjectName || 'General'}</p>
             {(() => {
               const selectedReceptionSet = new Set<string>();
-              linesToPay.forEach((line, idx) => {
-                if (line.selected && items[idx]?.ReceptionNumbers) {
-                  items[idx].ReceptionNumbers.split(',').forEach((r: string) => {
+              linesToPay.forEach((line) => {
+                if (line.selected && line.receptionNumbers) {
+                  line.receptionNumbers.split(',').forEach((r: string) => {
                     if (r.trim()) selectedReceptionSet.add(r.trim());
                   });
                 }
               });
               const receptionNumbers = Array.from(selectedReceptionSet).join(', ');
-              return receptionNumbers ? <p><strong>Recepciones Detectadas:</strong> {receptionNumbers}</p> : null;
+              return receptionNumbers ? <p><strong>Recepciones Incluidas:</strong> {receptionNumbers}</p> : null;
             })()}
           </div>
 
@@ -827,7 +873,9 @@ export const BoletinMedicion: React.FC = () => {
                           />
                         </td>
                         <td>{line.description}</td>
-                        <td style={{ fontSize: '0.8rem', color: '#666' }}>{line.receptionNumbers || 'N/A'}</td>
+                        <td style={{ fontSize: '0.8rem', color: line.selected ? '#1976d2' : '#ccc', fontWeight: line.selected ? '600' : 'normal' }}>
+                          {line.selected ? (line.receptionNumbers || 'N/A') : '—'}
+                        </td>
                         <td style={{ textAlign: 'center' }}>{item?.ReceivedQuantity}</td>
                         <td style={{ textAlign: 'center', color: '#666' }}>{paidByOthers}</td>
                         <td style={{ textAlign: 'center', fontWeight: 'bold', color: available > 0 ? '#28a745' : '#d32f2f' }}>

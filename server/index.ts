@@ -457,6 +457,17 @@ app.delete("/api/budgets/:id", authenticateToken, async (req, res) => {
 app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
   try {
     const pool = await connectAdmCloud();
+    const user = (req as any).user;
+    const departmentFilterParam = req.query.departmentFilter;
+    
+    // Determinar el filtro según el parámetro enviado y los permisos del usuario
+    let departmentFilter = '';
+    
+    if (departmentFilterParam === 'subcontratos' && user?.accessSubcontratos) {
+      // Si el usuario solicita filtrar por Subcontratos y tiene el permiso
+      departmentFilter = `AND t.[DepartmentID] = '134A52D2-1FF9-4BB1-564D-08DE34362E70'`;
+    }
+    
     const query = `
         SELECT TOP 1000
             t.[ID],
@@ -467,6 +478,7 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
             t.[Status],
             t.[TaxAmount],
             t.[TotalAmount],
+            t.[DepartmentID],
             r.[FullName] as VendorName,
             p.[Name] as ProjectName
         FROM [dbo].[SA_Transactions] t
@@ -474,9 +486,23 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
         LEFT JOIN [dbo].[PA_Projects] p ON t.[ProjectID] = p.[ID]
         WHERE t.[SubsidiaryID] = 'FBC6AADF-8B12-47F7-AA18-08DDDFE6F02E'
           AND t.[DocType] = 'PO'
+          ${departmentFilter}
         ORDER BY p.[Name] ASC, t.[DocDate] DESC, t.[DocID] DESC
     `;
+    
+    console.log('\n🔍 === FILTRO DE TRANSACCIONES ===');
+    console.log(`Usuario: ${user?.email}`);
+    console.log(`Query param 'departmentFilter': ${departmentFilterParam || 'NO ENVIADO'}`);
+    console.log(`Permiso accessSubcontratos: ${user?.accessSubcontratos}`);
+    console.log(`Filtro SQL generado: ${departmentFilter || 'NINGUNO (todas las órdenes)'}`);
+    console.log(`Query completa: ${query.substring(0, 300)}...`);
+    
     const result = await pool.request().query(query);
+    console.log(`✅ Resultados devueltos: ${result.recordset.length} órdenes`);
+    if (departmentFilterParam === 'subcontratos') {
+      console.log(`📋 DocIDs devueltos: ${result.recordset.map((r: any) => r.DocID).join(', ')}`);
+    }
+    console.log('=================================\n');
     res.json(result.recordset);
   } catch (error) {
     console.error("Error fetching AdmCloud transactions:", error);
