@@ -24,7 +24,7 @@ async function checkBoletines() {
         console.log(`   Monto: $${b.netTotal.toFixed(2)}`);
         console.log(`   Fecha: ${b.date.toISOString().split('T')[0]}`);
         console.log(`   Líneas: ${b.lines.length}`);
-        if (b.status === 'RECHAZADO' && b.rejectionReason) {
+        if (b.status === 'RECHAZADO' && 'rejectionReason' in b && b.rejectionReason) {
           console.log(`   ❌ Motivo rechazo: ${b.rejectionReason}`);
         }
         console.log('');
@@ -40,8 +40,8 @@ async function checkBoletines() {
       console.log(`   ✅ Aprobados: ${aprobados}`);
       console.log(`   ❌ Rechazados: ${rechazados}`);
     }
-  } catch (error: any) {
-    console.error('❌ Error al consultar la base de datos:', error.message);
+  } catch (error) {
+    console.error('❌ Error al consultar la base de datos:', error instanceof Error ? error.message : 'Error desconocido');
   } finally {
     await prisma.$disconnect();
   }
