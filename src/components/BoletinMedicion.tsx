@@ -39,6 +39,7 @@ interface BoletinLine {
   taxAmount: number;
   retentionPercent: number;
   retentionAmount: number;
+  itbisRetentionPercent: number;
   totalLine: number;
   selected?: boolean;
 }
@@ -62,7 +63,7 @@ export const BoletinMedicion: React.FC = () => {
 
   // Boletin Logic State
   const [linesToPay, setLinesToPay] = useState<any[]>([]);
-  const [retentionPercent, setRetentionPercent] = useState(5); // 5% por defecto
+  const [retentionPercent, setRetentionPercent] = useState(0);
   const [advancePercent, setAdvancePercent] = useState(0);
   const [isrPercent, setIsrPercent] = useState(0); // Nueva: Retención ISR
   const [isSaving, setIsSaving] = useState(false);
@@ -293,6 +294,7 @@ export const BoletinMedicion: React.FC = () => {
             taxAmount: 0,
             retentionPercent: 0,
             retentionAmount: 0,
+            itbisRetentionPercent: 0,
             totalLine: 0,
             selected: false
           };
@@ -390,6 +392,15 @@ export const BoletinMedicion: React.FC = () => {
     } else {
       newLines[index] = { ...newLines[index], [field]: value };
     }
+    
+    // Calcular automáticamente el impuesto cuando se selecciona una línea
+    if (field === 'selected' && value === true) {
+      const line = newLines[index];
+      const subtotal = line.quantity * line.unitPrice;
+      const taxAmount = subtotal * (line.taxPercent / 100);
+      newLines[index] = { ...newLines[index], taxAmount };
+    }
+    
     setLinesToPay(newLines);
     setHasUnsavedChanges(true);
   };
@@ -399,23 +410,48 @@ export const BoletinMedicion: React.FC = () => {
     let subTotal = 0;
     let totalTax = 0;
     let totalRetentionByLine = 0;
+    let totalItbisRetention = 0;
 
     selected.forEach(l => {
       const st = l.quantity * l.unitPrice;
       const tax = st * (l.taxPercent / 100);
-      const retentionByLine = (st + tax) * ((l.retentionPercent || 0) / 100);
+      const retentionByLine = st * ((l.retentionPercent || 0) / 100);
+      const itbisRetention = tax * ((l.itbisRetentionPercent || 0) / 100);
       
       subTotal += st;
       totalTax += tax;
       totalRetentionByLine += retentionByLine;
+      totalItbisRetention += itbisRetention;
     });
 
     const retAmount = subTotal * (retentionPercent / 100);
     const advAmount = subTotal * (advancePercent / 100);
     const isrAmount = subTotal * (isrPercent / 100);
-    const net = (subTotal + totalTax) - totalRetentionByLine - retAmount - advAmount - isrAmount;
+    const net = (subTotal + totalTax) - totalRetentionByLine - totalItbisRetention - retAmount - advAmount - isrAmount;
 
-    return { subTotal, totalTax, retAmount, advAmount, isrAmount, totalRetentionByLine, net };
+    return { subTotal, totalTax, retAmount, advAmount, isrAmount, totalRetentionByLine, totalItbisRetention, net };
+  };
+
+  const getRetentionsSummary = () => {
+    const selected = linesToPay.filter(l => l.selected && l.retentionPercent > 0);
+    const summary: { [key: string]: { name: string; percent: number; total: number } } = {};
+    
+    selected.forEach(line => {
+      const retention = availableRetentions.find(r => r.percentage === line.retentionPercent);
+      const retentionName = retention ? retention.name : `Retención ${line.retentionPercent}%`;
+      const key = `${line.retentionPercent}`;
+      
+      const st = line.quantity * line.unitPrice;
+      const tax = st * (line.taxPercent / 100);
+      const retentionAmount = st * (line.retentionPercent / 100);
+      
+      if (!summary[key]) {
+        summary[key] = { name: retentionName, percent: line.retentionPercent, total: 0 };
+      }
+      summary[key].total += retentionAmount;
+    });
+    
+    return Object.values(summary);
   };
 
   const saveBoletin = async () => {
@@ -545,17 +581,32 @@ export const BoletinMedicion: React.FC = () => {
       doc.setTextColor(100); // Restaurar color
     }
 
-    const tableColumn = ["Descripción", "Recepción", "Cantidad", "Precio Unit.", "ITBIS", "Total"];
+    const tableColumn = ["Descripción", "Recepción", "Cantidad", "Precio Unit.", "ITBIS", "Retención", "Total"];
     const tableRows = (boletin.lines || []).map((l: any, idx: number) => {
-      // Intentar vincular la recepción si estamos en modo generación/edición activa
-      // O si el objeto boletin ya trae la información de recepciones por línea
+      const subtotal = l.quantity * l.unitPrice;
+      const tax = subtotal * ((l.taxPercent || 0) / 100);
+      const retention = subtotal * ((l.retentionPercent || 0) / 100);
+      const itbisRetention = tax * ((l.itbisRetentionPercent || 0) / 100);
+      const lineTotal = subtotal + tax - retention - itbisRetention;
+      
+      let retentionText = '';
+      if (l.retentionPercent > 0 || l.itbisRetentionPercent > 0) {
+        const parts = [];
+        if (l.retentionPercent > 0) parts.push(`${l.retentionPercent}%`);
+        if (l.itbisRetentionPercent > 0) parts.push(`ITBIS ${l.itbisRetentionPercent}%`);
+        retentionText = parts.join(', ');
+      } else {
+        retentionText = 'N/A';
+      }
+      
       return [
         l.description,
-        l.receptionNumbers || "", // Este campo vendrá de la DB si lo agregamos o del mapeo actual
+        l.receptionNumbers || "",
         l.quantity,
         `$${formatCurrency(l.unitPrice)}`,
-        `$${formatCurrency(l.taxAmount || 0)}`,
-        `$${formatCurrency(l.totalLine || 0)}`
+        `$${formatCurrency(tax)}`,
+        retentionText,
+        `$${formatCurrency(lineTotal)}`
       ];
     });
 
@@ -586,6 +637,58 @@ export const BoletinMedicion: React.FC = () => {
     doc.text(`$${formatCurrency(boletin.taxAmount)}`, valueX, finalY + 6, { align: 'right' });
     
     let currentY = finalY + 12;
+
+    // Calcular y agrupar retenciones por línea por tipo y porcentaje
+    const retentionsByType: { [key: string]: { percent: number; amount: number } } = {};
+    const itbisRetentionsByPercent: { [key: string]: number } = {};
+    
+    (boletin.lines || []).forEach((line: any) => {
+      const st = line.quantity * line.unitPrice;
+      
+      // Agrupar retenciones normales por porcentaje
+      if (line.retentionPercent && line.retentionPercent > 0) {
+        const retention = st * (line.retentionPercent / 100);
+        const key = `${line.retentionPercent}`;
+        if (!retentionsByType[key]) {
+          retentionsByType[key] = { percent: line.retentionPercent, amount: 0 };
+        }
+        retentionsByType[key].amount += retention;
+      }
+      
+      // Agrupar retenciones de ITBIS por porcentaje
+      if (line.itbisRetentionPercent && line.itbisRetentionPercent > 0) {
+        const tax = st * ((line.taxPercent || 0) / 100);
+        const itbisRet = tax * (line.itbisRetentionPercent / 100);
+        const key = `${line.itbisRetentionPercent}`;
+        if (!itbisRetentionsByPercent[key]) {
+          itbisRetentionsByPercent[key] = 0;
+        }
+        itbisRetentionsByPercent[key] += itbisRet;
+      }
+    });
+
+    // Mostrar retenciones normales desglosadas
+    const retentionKeys = Object.keys(retentionsByType);
+    if (retentionKeys.length > 0) {
+      retentionKeys.forEach(key => {
+        const ret = retentionsByType[key];
+        const retentionName = availableRetentions.find(r => r.percentage === ret.percent)?.name || `Retención ${ret.percent}%`;
+        doc.text(`${retentionName}:`, labelX, currentY);
+        doc.text(`-$${formatCurrency(ret.amount)}`, valueX, currentY, { align: 'right' });
+        currentY += 6;
+      });
+    }
+
+    // Mostrar retenciones de ITBIS desglosadas
+    const itbisKeys = Object.keys(itbisRetentionsByPercent);
+    if (itbisKeys.length > 0) {
+      itbisKeys.forEach(key => {
+        const amount = itbisRetentionsByPercent[key];
+        doc.text(`Retención ITBIS ${key}%:`, labelX, currentY);
+        doc.text(`-$${formatCurrency(amount)}`, valueX, currentY, { align: 'right' });
+        currentY += 6;
+      });
+    }
 
     if (boletin.retentionAmount > 0) {
       doc.text(`Fondo Reparo (${boletin.retentionPercent}%):`, labelX, currentY);
@@ -1043,6 +1146,8 @@ export const BoletinMedicion: React.FC = () => {
                     <th style={{ width: '140px' }}>Recepción</th>
                     <th>Precio Unit.</th>
                     <th>Impuesto</th>
+                    <th style={{ textAlign: 'right', width: '100px' }}>Total Impuesto</th>
+                    <th style={{ width: '110px' }}>Ret. ITBIS %</th>
                     <th style={{ width: '180px' }}>Retención</th>
                     <th style={{ textAlign: 'right', width: '100px' }}>Retenido</th>
                     <th style={{ textAlign: 'right', width: '110px' }}>Subtotal</th>
@@ -1116,6 +1221,29 @@ export const BoletinMedicion: React.FC = () => {
                           <option value="Exento 0%">Exento 0%</option>
                         </select>
                       </td>
+                      <td style={{ textAlign: 'right', color: line.selected ? '#ff9800' : '#999', fontWeight: '500' }}>
+                        {line.selected ? `+$${formatCurrency((line.quantity * line.unitPrice) * (line.taxPercent / 100))}` : '$0.00'}
+                      </td>
+                      <td>
+                        <select 
+                          value={line.itbisRetentionPercent || 0}
+                          onChange={(e) => updateLine(idx, 'itbisRetentionPercent', Number(e.target.value))}
+                          disabled={!line.selected || line.taxPercent === 0}
+                          style={{ 
+                            width: '100%',
+                            fontSize: '0.8rem',
+                            padding: '5px 8px',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            backgroundColor: (line.selected && line.taxPercent > 0) ? '#fff' : '#f5f5f5',
+                            cursor: (line.selected && line.taxPercent > 0) ? 'pointer' : 'not-allowed'
+                          }}
+                        >
+                          <option value={0}>No retener (0%)</option>
+                          <option value={10}>Retener 10%</option>
+                          <option value={100}>Retener 100%</option>
+                        </select>
+                      </td>
                       <td>
                         <select 
                           value={line.retentionPercent || 0}
@@ -1134,16 +1262,20 @@ export const BoletinMedicion: React.FC = () => {
                           <option value={0}>Sin retención (0%)</option>
                           {availableRetentions.map(ret => (
                             <option key={ret.id} value={ret.percentage}>
-                              {ret.name} - {ret.percentage}%
+                              {ret.name}
                             </option>
                           ))}
                         </select>
                       </td>
-                      <td style={{ textAlign: 'right', color: '#d32f2f', fontWeight: '500' }}>
-                        -${formatCurrency((line.quantity * line.unitPrice * (1 + line.taxPercent / 100)) * ((line.retentionPercent || 0) / 100))}
+                      <td style={{ textAlign: 'right', color: line.selected ? '#d32f2f' : '#999', fontWeight: '500' }}>
+                        {line.selected ? `-$${formatCurrency((line.quantity * line.unitPrice) * ((line.retentionPercent || 0) / 100))}` : '$0.00'}
                       </td>
-                      <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                        ${formatCurrency((line.quantity * line.unitPrice * (1 + line.taxPercent / 100)) * (1 - (line.retentionPercent || 0) / 100))}
+                      <td style={{ textAlign: 'right', fontWeight: line.selected ? 'bold' : 'normal', color: line.selected ? '#000' : '#999' }}>
+                        {line.selected ? `$${formatCurrency(
+                          (line.quantity * line.unitPrice) * (1 + (line.taxPercent / 100)) 
+                          - (line.quantity * line.unitPrice) * ((line.retentionPercent || 0) / 100)
+                          - ((line.quantity * line.unitPrice) * (line.taxPercent / 100)) * ((line.itbisRetentionPercent || 0) / 100)
+                        )}` : '$0.00'}
                       </td>
                     </tr>
                   );
@@ -1155,73 +1287,100 @@ export const BoletinMedicion: React.FC = () => {
 
           <div className="totals-section card" style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px' }}>
             <div className="retentions-panel">
-              <h4>Retenciones y Deducciones</h4>
-              <div className="form-group" style={{ marginBottom: '15px' }}>
-                <label>Fondo de Reparo (5% habitual)</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <input 
-                    type="number" 
-                    value={retentionPercent} 
-                    onChange={(e) => {
-                      setRetentionPercent(Number(e.target.value));
-                      setHasUnsavedChanges(true);
-                    }}
-                    style={{ width: '80px' }}
-                  /> %
-                  <span className="amount-preview">-${formatCurrency(totals.retAmount)}</span>
+              <h4 style={{ marginBottom: '20px', borderBottom: '2px solid #1976d2', paddingBottom: '10px' }}>Retenciones y Deducciones</h4>
+              
+              {/* Retenciones aplicadas por línea */}
+              {getRetentionsSummary().length > 0 && (
+                <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f5f5f5', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
+                  <h5 style={{ margin: '0 0 10px 0', color: '#666', fontSize: '0.9rem', fontWeight: 600 }}>📋 Retenciones por Línea</h5>
+                  {getRetentionsSummary().map((ret, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', padding: '8px', backgroundColor: '#fff', borderRadius: '4px' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#555' }}>
+                        <strong>{ret.name}</strong> ({ret.percent}%)
+                      </span>
+                      <span style={{ color: '#d32f2f', fontWeight: '600', fontSize: '0.9rem' }}>${formatCurrency(ret.total)}</span>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #ddd', display: 'flex', justifyContent: 'space-between' }}>
+                    <strong style={{ fontSize: '0.9rem' }}>Total Retenciones:</strong>
+                    <strong style={{ color: '#d32f2f', fontSize: '0.95rem' }}>${formatCurrency(totals.totalRetentionByLine)}</strong>
+                  </div>
                 </div>
-              </div>
-              <div className="form-group" style={{ marginBottom: '15px' }}>
-                <label>Amortización de Anticipo (%)</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <input 
-                    type="number" 
-                    value={advancePercent} 
-                    onChange={(e) => {
-                      setAdvancePercent(Number(e.target.value));
-                      setHasUnsavedChanges(true);
-                    }}
-                    style={{ width: '80px' }}
-                  /> %
-                  <span className="amount-preview">-${formatCurrency(totals.advAmount)}</span>
-                </div>
-              </div>
-              <div className="form-group">
-                <label>Retención ISR (%)</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <input 
-                    type="number" 
-                    value={isrPercent} 
-                    onChange={(e) => {
-                      setIsrPercent(Number(e.target.value));
-                      setHasUnsavedChanges(true);
-                    }}
-                    style={{ width: '80px' }}
-                  /> %
-                  <span className="amount-preview">-${formatCurrency(totals.isrAmount)}</span>
-                </div>
-              </div>
+              )}
             </div>
 
-            <div className="summary-panel" style={{ textAlign: 'right' }}>
-              <h4>Resumen Económico</h4>
-              <p>Subtotal: <strong>${formatCurrency(totals.subTotal)}</strong></p>
-              <p>ITBIS: <strong>${formatCurrency(totals.totalTax)}</strong></p>
-              <p>Total Bruto: <strong>${formatCurrency(totals.subTotal + totals.totalTax)}</strong></p>
-              <hr />
-              {totals.totalRetentionByLine > 0 && (
-                <p style={{ color: '#d32f2f' }}>Retenciones por Línea: <strong>-${formatCurrency(totals.totalRetentionByLine)}</strong></p>
+            <div className="summary-panel" style={{ padding: '20px', backgroundColor: '#fafafa', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
+              <h4 style={{ marginBottom: '20px', borderBottom: '2px solid #1976d2', paddingBottom: '10px' }}>💰 Resumen Económico</h4>
+              
+              <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#fff', borderRadius: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.95rem' }}>
+                  <span>Subtotal:</span>
+                  <strong>${formatCurrency(totals.subTotal)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.95rem', color: '#ff9800' }}>
+                  <span>+ ITBIS:</span>
+                  <strong>${formatCurrency(totals.totalTax)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '10px', borderTop: '1px solid #e0e0e0', fontSize: '1rem' }}>
+                  <strong>Total Bruto:</strong>
+                  <strong>${formatCurrency(totals.subTotal + totals.totalTax)}</strong>
+                </div>
+              </div>
+              
+              {(totals.totalRetentionByLine > 0 || totals.totalItbisRetention > 0 || totals.retAmount > 0 || totals.advAmount > 0 || totals.isrAmount > 0) && (
+                <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#fff3e0', borderRadius: '6px', border: '1px solid #ffb74d' }}>
+                  <h5 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: '#e65100' }}>Deducciones Aplicadas:</h5>
+                  {getRetentionsSummary().map((ret, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.85rem', paddingLeft: '10px' }}>
+                      <span>{ret.name}</span>
+                      <span style={{ color: '#d32f2f', fontWeight: '600' }}>-${formatCurrency(ret.total)}</span>
+                    </div>
+                  ))}
+                  {totals.totalItbisRetention > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.85rem', paddingLeft: '10px' }}>
+                      <span>Retención de ITBIS</span>
+                      <span style={{ color: '#d32f2f', fontWeight: '600' }}>-${formatCurrency(totals.totalItbisRetention)}</span>
+                    </div>
+                  )}
+                  {totals.retAmount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.85rem', paddingLeft: '10px' }}>
+                      <span>Fondo de Reparo ({retentionPercent}%)</span>
+                      <span style={{ color: '#d32f2f', fontWeight: '600' }}>-${formatCurrency(totals.retAmount)}</span>
+                    </div>
+                  )}
+                  {totals.advAmount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.85rem', paddingLeft: '10px' }}>
+                      <span>Amort. Anticipo ({advancePercent}%)</span>
+                      <span style={{ color: '#d32f2f', fontWeight: '600' }}>-${formatCurrency(totals.advAmount)}</span>
+                    </div>
+                  )}
+                  {totals.isrAmount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.85rem', paddingLeft: '10px' }}>
+                      <span>ISR ({isrPercent}%)</span>
+                      <span style={{ color: '#d32f2f', fontWeight: '600' }}>-${formatCurrency(totals.isrAmount)}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #ffb74d' }}>
+                    <strong style={{ fontSize: '0.9rem' }}>Total Deducciones:</strong>
+                    <strong style={{ color: '#d32f2f', fontSize: '0.9rem' }}>-${formatCurrency(totals.totalRetentionByLine + totals.totalItbisRetention + totals.retAmount + totals.advAmount + totals.isrAmount)}</strong>
+                  </div>
+                </div>
               )}
-              <p style={{ fontSize: '1.2rem', color: '#1976d2' }}>
-                Neto a Pagar: <strong>${formatCurrency(totals.net)}</strong>
-              </p>
+              
+              <div style={{ padding: '20px', backgroundColor: '#e3f2fd', borderRadius: '6px', border: '2px solid #1976d2', marginBottom: '15px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '1.1rem', fontWeight: '600', color: '#1976d2' }}>Neto a Pagar:</span>
+                  <strong style={{ fontSize: '1.4rem', color: '#1976d2' }}>${formatCurrency(totals.net)}</strong>
+                </div>
+              </div>
+              
               <button 
                 className="btn-primary" 
-                style={{ marginTop: '10px', width: '100%', padding: '15px' }}
+                style={{ marginTop: '10px', width: '100%', padding: '15px', fontSize: '1rem', fontWeight: '600' }}
                 disabled={isSaving || linesToPay.filter(l=>l.selected).length === 0}
                 onClick={saveBoletin}
               >
-                {isSaving ? 'Guardando...' : (editingId ? 'Actualizar Boletín' : 'Generar Solicitud de Pago')}
+                {isSaving ? '⏳ Guardando...' : (editingId ? '📝 Actualizar Boletín' : '✅ Generar Solicitud de Pago')}
               </button>
             </div>
           </div>

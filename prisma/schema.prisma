@@ -113,5 +113,6 @@ model PaymentRequestLine {
   taxAmount        Float          // Calculado x linea
   retentionPercent Float          @default(0) // Retención por línea (ej: 5%)
   retentionAmount  Float          @default(0) // Monto retenido por línea
+  itbisRetentionPercent Float     @default(0) // Retención de ITBIS (0%, 10%, 100%)
   totalLine        Float          // quantity * unitPrice + taxAmount - retentionAmount
 }

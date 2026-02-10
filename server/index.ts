@@ -641,15 +641,18 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
     let subTotal = 0;
     let taxAmount = 0;
     let totalRetentionByLine = 0;
+    let totalItbisRetention = 0;
 
     const formattedLines = lines.map((l: any) => {
       const lineTax = l.quantity * l.unitPrice * (l.taxPercent / 100);
-      const lineRetention = (l.quantity * l.unitPrice + lineTax) * ((l.retentionPercent || 0) / 100);
-      const lineTotal = (l.quantity * l.unitPrice) + lineTax - lineRetention;
+      const lineRetention = (l.quantity * l.unitPrice) * ((l.retentionPercent || 0) / 100);
+      const lineItbisRetention = lineTax * ((l.itbisRetentionPercent || 0) / 100);
+      const lineTotal = (l.quantity * l.unitPrice) + lineTax - lineRetention - lineItbisRetention;
       
       subTotal += (l.quantity * l.unitPrice);
       taxAmount += lineTax;
       totalRetentionByLine += lineRetention;
+      totalItbisRetention += lineItbisRetention;
       
       return {
         externalItemID: l.externalItemID,
@@ -662,6 +665,7 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
         taxAmount: lineTax,
         retentionPercent: l.retentionPercent || 0,
         retentionAmount: lineRetention,
+        itbisRetentionPercent: l.itbisRetentionPercent || 0,
         totalLine: lineTotal
       };
     });
@@ -669,7 +673,7 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
     const retentionAmount = subTotal * (retentionPercent / 100);
     const advanceAmount = subTotal * (advancePercent / 100);
     const isrAmount = subTotal * (isrPercent / 100);
-    const netTotal = (subTotal + taxAmount) - totalRetentionByLine - retentionAmount - advanceAmount - isrAmount;
+    const netTotal = (subTotal + taxAmount) - totalRetentionByLine - totalItbisRetention - retentionAmount - advanceAmount - isrAmount;
 
     const pr = await prisma.paymentRequest.create({
       data: {
@@ -732,15 +736,18 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
     let subTotal = 0;
     let taxAmount = 0;
     let totalRetentionByLine = 0;
+    let totalItbisRetention = 0;
 
     const formattedLines = lines.map((l: any) => {
       const lineTax = l.quantity * l.unitPrice * (l.taxPercent / 100);
-      const lineRetention = (l.quantity * l.unitPrice + lineTax) * ((l.retentionPercent || 0) / 100);
-      const lineTotal = (l.quantity * l.unitPrice) + lineTax - lineRetention;
+      const lineRetention = (l.quantity * l.unitPrice) * ((l.retentionPercent || 0) / 100);
+      const lineItbisRetention = lineTax * ((l.itbisRetentionPercent || 0) / 100);
+      const lineTotal = (l.quantity * l.unitPrice) + lineTax - lineRetention - lineItbisRetention;
       
       subTotal += (l.quantity * l.unitPrice);
       taxAmount += lineTax;
       totalRetentionByLine += lineRetention;
+      totalItbisRetention += lineItbisRetention;
       
       return {
         externalItemID: l.externalItemID,
@@ -753,6 +760,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
         taxAmount: lineTax,
         retentionPercent: l.retentionPercent || 0,
         retentionAmount: lineRetention,
+        itbisRetentionPercent: l.itbisRetentionPercent || 0,
         totalLine: lineTotal
       };
     });
@@ -760,7 +768,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
     const retentionAmount = subTotal * (retentionPercent / 100);
     const advanceAmount = subTotal * (advancePercent / 100);
     const isrAmount = subTotal * (isrPercent / 100);
-    const netTotal = (subTotal + taxAmount) - totalRetentionByLine - retentionAmount - advanceAmount - isrAmount;
+    const netTotal = (subTotal + taxAmount) - totalRetentionByLine - totalItbisRetention - retentionAmount - advanceAmount - isrAmount;
 
     // Actualizar usando una transacción para borrar lineas viejas y crear nuevas
     const updatedPR = await prisma.$transaction(async (tx) => {
