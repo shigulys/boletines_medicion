@@ -72,7 +72,7 @@ export const BoletinMedicion: React.FC = () => {
     fetchTransactions();
     fetchBoletinHistory();
     const params = new URLSearchParams(window.location.search);
-    setIsNewTab(params.has('editBoletin') || params.has('generateBoletin'));
+    setIsNewTab(params.has('editBoletin') || params.has('generateBoletin') || params.has('boletinSelection'));
   }, [filterSubcontratos]);
 
   // Nuevo: Efecto para detectar edición o generación desde la URL (abre en nuevo tab)
@@ -608,6 +608,17 @@ export const BoletinMedicion: React.FC = () => {
               </tbody>
             </table>
           </div>
+          
+          {/* Botón flotante para cerrar en nueva pestaña */}
+          {isNewTab && (
+            <button 
+              className="floating-close-btn"
+              onClick={() => window.close()}
+              title="Cerrar ventana"
+            >
+              ✕
+            </button>
+          )}
         </div>
       ) : !selectedTx ? (
         <div className="card">
@@ -804,6 +815,17 @@ export const BoletinMedicion: React.FC = () => {
               )}
             </div>
           )}
+          
+          {/* Botón flotante para cerrar en nueva pestaña */}
+          {isNewTab && (
+            <button 
+              className="floating-close-btn"
+              onClick={() => window.close()}
+              title="Cerrar ventana"
+            >
+              ✕
+            </button>
+          )}
         </div>
       ) : (
         <div className="boletin-form">
@@ -980,12 +1002,55 @@ export const BoletinMedicion: React.FC = () => {
               </button>
             </div>
           </div>
+          
+          {/* Botón flotante para cerrar en nueva pestaña */}
+          {isNewTab && (
+            <button 
+              className="floating-close-btn"
+              onClick={() => window.close()}
+              title="Cerrar ventana"
+            >
+              ✕
+            </button>
+          )}
         </div>
       )}
 
       <style>{`
         .boletin-container { padding: 15px; max-width: 100%; margin: 0 auto; width: 100%; }
         .card { background: white; padding: 24px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden; }
+        
+        /* Botón flotante de cierre */
+        .floating-close-btn {
+          position: fixed;
+          bottom: 30px;
+          right: 30px;
+          width: 60px;
+          height: 60px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+          color: white;
+          border: none;
+          font-size: 24px;
+          font-weight: bold;
+          cursor: pointer;
+          box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+          transition: all 0.3s ease;
+          z-index: 1000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        
+        .floating-close-btn:hover {
+          transform: scale(1.1);
+          box-shadow: 0 6px 16px rgba(220, 53, 69, 0.6);
+          background: linear-gradient(135deg, #c82333 0%, #bd2130 100%);
+        }
+        
+        .floating-close-btn:active {
+          transform: scale(0.95);
+        }
         .history-card { width: 100%; overflow-x: auto; padding: 30px; }
         .table-responsive { width: 100%; overflow-x: auto; margin-top: 20px; }
         .data-table { width: 100%; border-collapse: collapse; min-width: 1200px; font-size: 0.95rem; }
