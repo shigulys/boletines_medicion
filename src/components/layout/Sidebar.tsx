@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
 interface AccordionProps {
-  title: string;
+  title: React.ReactNode;
   children: React.ReactNode;
   isOpen: boolean;
   onToggle: () => void;
@@ -12,7 +12,7 @@ const AccordionItem: React.FC<AccordionProps> = ({ title, children, isOpen, onTo
   return (
     <div className="sidebar-accordion">
       <button className={`accordion-header ${isOpen ? 'active' : ''}`} onClick={onToggle}>
-        <span>{title}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>{title}</span>
         <span className={`accordion-icon ${isOpen ? 'open' : ''}`}>▼</span>
       </button>
       <div className={`accordion-content ${isOpen ? 'show' : ''}`}>
@@ -28,7 +28,8 @@ export const Sidebar: React.FC<{
   onSelectBudget: () => void;
   onSelectAdmCloud: () => void;
   onSelectBoletin: () => void;
-}> = ({ onSelectManagement, onSelectDashboard, onSelectBudget, onSelectAdmCloud, onSelectBoletin }) => {
+  onSelectRetentions: () => void;
+}> = ({ onSelectManagement, onSelectDashboard, onSelectBudget, onSelectAdmCloud, onSelectBoletin, onSelectRetentions }) => {
   const { user, logout } = useAuth();
   const [openSection, setOpenSection] = useState<string | null>('Ingeniería');
 
@@ -42,15 +43,15 @@ export const Sidebar: React.FC<{
   return (
     <aside className="main-sidebar">
       <div className="sidebar-brand" onClick={onSelectDashboard} style={{ cursor: 'pointer' }}>
-        <h3>SISTEMA DE OBRA v1.3</h3>
-        <p>Panel de Control Activo</p>
+        <h3><span style={{ marginRight: '8px' }}>🏗️</span>SISTEMA DE OBRA v1.3</h3>
+        <p><span style={{ marginRight: '6px' }}>📊</span>Panel de Control Activo</p>
       </div>
 
       <div className="sidebar-user">
         <div className="user-avatar">{user?.name?.charAt(0) || 'U'}</div>
         <div className="user-info">
           <span className="user-name">{user?.name || user?.email}</span>
-          <span className="user-role">{user?.role === 'admin' ? 'Administrador' : 'Ingeniero de Obra'}</span>
+          <span className="user-role"><span style={{ marginRight: '6px' }}>{user?.role === 'admin' ? '👑' : '👤'}</span>{user?.role === 'admin' ? 'Administrador' : 'Ingeniero de Obra'}</span>
         </div>
       </div>
 
@@ -64,53 +65,60 @@ export const Sidebar: React.FC<{
           <>
             {user?.accessIngenieria && (
               <AccordionItem 
-                title="INGENIERÍA" 
+                title={<><span style={{ fontSize: '1.2rem' }}>📏</span> INGENIERÍA</>} 
                 isOpen={openSection === 'Ingeniería'} 
                 onToggle={() => toggleSection('Ingeniería')}
               >
                 <ul>
-                  <li>Control de Avance</li>
-                  <li>Planos y Especificaciones</li>
-                  <li>Bitácora de Obra</li>
+                  <li><span style={{ marginRight: '8px' }}>📈</span>Control de Avance</li>
+                  <li><span style={{ marginRight: '8px' }}>🗃️</span>Planos y Especificaciones</li>
+                  <li><span style={{ marginRight: '8px' }}>📓</span>Bitácora de Obra</li>
                 </ul>
               </AccordionItem>
             )}
 
             {user?.accessSubcontratos && (
               <AccordionItem 
-                title="SUBCONTRATOS" 
+                title={<><span style={{ fontSize: '1.2rem' }}>👷</span> SUBCONTRATOS</>} 
                 isOpen={openSection === 'Subcontratos'} 
                 onToggle={() => toggleSection('Subcontratos')}
               >
                 <ul>
-                  <li>Gestión de Contratistas</li>
-                  <li>Estimaciones de Pago</li>
-                  <li>Seguimiento de Tareas</li>
+                  <li><span style={{ marginRight: '8px' }}>🤝</span>Gestión de Contratistas</li>
+                  <li><span style={{ marginRight: '8px' }}>💸</span>Estimaciones de Pago</li>
+                  <li><span style={{ marginRight: '8px' }}>✓️</span>Seguimiento de Tareas</li>
                 </ul>
               </AccordionItem>
             )}
 
             {user?.accessContabilidad && (
               <AccordionItem 
-                title="CONTABILIDAD" 
+                title={<><span style={{ fontSize: '1.2rem' }}>💰</span> CONTABILIDAD</>} 
                 isOpen={openSection === 'Contabilidad'} 
                 onToggle={() => toggleSection('Contabilidad')}
               >
                 <ul>
-                  <li onClick={onSelectBudget} style={{ cursor: 'pointer' }}>Presupuestos</li>
-                  <li onClick={onSelectAdmCloud} style={{ cursor: 'pointer' }}>AdmCloud PO</li>
-                  <li onClick={() => window.open('/?boletinSelection=true', '_blank')} style={{ cursor: 'pointer', fontWeight: 'bold', color: '#1976d2' }}>Boletín de Medición</li>
-                  <li>Órdenes de Compra</li>
-                  <li>Reportes Financieros</li>
+                  <li onClick={onSelectBudget} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>📋</span>Presupuestos</li>
+                  <li onClick={onSelectAdmCloud} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>☁️</span>AdmCloud PO</li>
+                  <li onClick={onSelectBoletin} style={{ cursor: 'pointer', fontWeight: 'bold', color: '#1976d2' }}><span style={{ marginRight: '8px' }}>📋</span>Boletín de Medición</li>
+                  <li><span style={{ marginRight: '8px' }}>📦</span>Órdenes de Compra</li>
+                  <li><span style={{ marginRight: '8px' }}>📄</span>Reportes Financieros</li>
                 </ul>
               </AccordionItem>
             )}
 
             {user?.role === 'admin' && (
               <div className="sidebar-accordion" style={{ marginTop: '1rem', borderTop: '1px solid #eee', paddingTop: '1rem' }}>
-                <button className="accordion-header" onClick={onSelectManagement}>
-                  <span>ADMINISTRACIÓN</span>
-                </button>
+                <AccordionItem 
+                  title={<><span style={{ fontSize: '1.2rem' }}>⚙️</span> ADMINISTRACIÓN</>} 
+                  isOpen={openSection === 'Admin'} 
+                  onToggle={() => toggleSection('Admin')}
+                >
+                  <ul>
+                    <li onClick={onSelectManagement} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>👥</span>Usuarios y Permisos</li>
+                    <li onClick={onSelectRetentions} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>📊</span>Catálogo de Retenciones</li>
+                  </ul>
+                </AccordionItem>
               </div>
             )}
           </>
@@ -154,7 +162,7 @@ export const Sidebar: React.FC<{
 
       <div className="sidebar-footer">
         <button onClick={logout} className="logout-button">
-          Cerrar Sesión
+          <span style={{ marginRight: '8px' }}>🚪</span>Cerrar Sesión
         </button>
       </div>
     </aside>

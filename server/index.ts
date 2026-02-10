@@ -640,12 +640,17 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
 
     let subTotal = 0;
     let taxAmount = 0;
+    let totalRetentionByLine = 0;
 
     const formattedLines = lines.map((l: any) => {
       const lineTax = l.quantity * l.unitPrice * (l.taxPercent / 100);
-      const lineTotal = (l.quantity * l.unitPrice) + lineTax;
+      const lineRetention = (l.quantity * l.unitPrice + lineTax) * ((l.retentionPercent || 0) / 100);
+      const lineTotal = (l.quantity * l.unitPrice) + lineTax - lineRetention;
+      
       subTotal += (l.quantity * l.unitPrice);
       taxAmount += lineTax;
+      totalRetentionByLine += lineRetention;
+      
       return {
         externalItemID: l.externalItemID,
         description: l.description,
@@ -655,6 +660,8 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
         taxType: l.taxType,
         taxPercent: l.taxPercent,
         taxAmount: lineTax,
+        retentionPercent: l.retentionPercent || 0,
+        retentionAmount: lineRetention,
         totalLine: lineTotal
       };
     });
@@ -662,7 +669,7 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
     const retentionAmount = subTotal * (retentionPercent / 100);
     const advanceAmount = subTotal * (advancePercent / 100);
     const isrAmount = subTotal * (isrPercent / 100);
-    const netTotal = (subTotal + taxAmount) - retentionAmount - advanceAmount - isrAmount;
+    const netTotal = (subTotal + taxAmount) - totalRetentionByLine - retentionAmount - advanceAmount - isrAmount;
 
     const pr = await prisma.paymentRequest.create({
       data: {
@@ -724,12 +731,17 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
 
     let subTotal = 0;
     let taxAmount = 0;
+    let totalRetentionByLine = 0;
 
     const formattedLines = lines.map((l: any) => {
       const lineTax = l.quantity * l.unitPrice * (l.taxPercent / 100);
-      const lineTotal = (l.quantity * l.unitPrice) + lineTax;
+      const lineRetention = (l.quantity * l.unitPrice + lineTax) * ((l.retentionPercent || 0) / 100);
+      const lineTotal = (l.quantity * l.unitPrice) + lineTax - lineRetention;
+      
       subTotal += (l.quantity * l.unitPrice);
       taxAmount += lineTax;
+      totalRetentionByLine += lineRetention;
+      
       return {
         externalItemID: l.externalItemID,
         description: l.description,
@@ -739,6 +751,8 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
         taxType: l.taxType,
         taxPercent: l.taxPercent,
         taxAmount: lineTax,
+        retentionPercent: l.retentionPercent || 0,
+        retentionAmount: lineRetention,
         totalLine: lineTotal
       };
     });
@@ -746,7 +760,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
     const retentionAmount = subTotal * (retentionPercent / 100);
     const advanceAmount = subTotal * (advancePercent / 100);
     const isrAmount = subTotal * (isrPercent / 100);
-    const netTotal = (subTotal + taxAmount) - retentionAmount - advanceAmount - isrAmount;
+    const netTotal = (subTotal + taxAmount) - totalRetentionByLine - retentionAmount - advanceAmount - isrAmount;
 
     // Actualizar usando una transacción para borrar lineas viejas y crear nuevas
     const updatedPR = await prisma.$transaction(async (tx) => {
@@ -783,7 +797,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
 
 app.patch("/api/payment-requests/:id/status", authenticateToken, async (req: any, res) => {
   const { id } = req.params;
-  const { status } = req.body; // PENDIENTE, APROBADO, RECHAZADO
+  const { status, rejectionReason } = req.body; // PENDIENTE, APROBADO, RECHAZADO
 
   try {
     const prId = parseInt(id);
@@ -796,12 +810,28 @@ app.patch("/api/payment-requests/:id/status", authenticateToken, async (req: any
       return res.status(403).json({ message: "No tiene permiso para aprobar/rechazar boletines" });
     }
 
+    // Validar que se proporcione un motivo al rechazar
+    if (status === 'RECHAZADO' && !rejectionReason?.trim()) {
+      return res.status(400).json({ message: "Debe proporcionar un motivo para el rechazo" });
+    }
+
+    const updateData: any = { status };
+    if (status === 'RECHAZADO') {
+      updateData.rejectionReason = rejectionReason;
+    } else {
+      // Si se aprueba o cambia a pendiente, limpiar el motivo de rechazo
+      updateData.rejectionReason = null;
+    }
+
     const updatedPR = await prisma.paymentRequest.update({
       where: { id: prId },
-      data: { status }
+      data: updateData
     });
 
     console.log(`[BOLETIN] ID ${id} cambiado a estado: ${status} por ${req.user.email}`);
+    if (rejectionReason) {
+      console.log(`[BOLETIN] Motivo de rechazo: ${rejectionReason}`);
+    }
     res.json(updatedPR);
   } catch (error: any) {
     console.error("Error en PATCH status:", error);
@@ -809,6 +839,100 @@ app.patch("/api/payment-requests/:id/status", authenticateToken, async (req: any
       message: "Error al cambiar el estado del boletín",
       detail: error.message 
     });
+  }
+});
+
+// ========= RETENCIONES CRUD =========
+
+// Obtener todas las retenciones
+app.get("/api/retentions", authenticateToken, async (req: any, res) => {
+  try {
+    const retentions = await prisma.retention.findMany({
+      orderBy: { code: 'asc' }
+    });
+    res.json(retentions);
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al obtener retenciones", detail: error.message });
+  }
+});
+
+// Obtener retenciones activas (para usar en formularios)
+app.get("/api/retentions/active", authenticateToken, async (req: any, res) => {
+  try {
+    const retentions = await prisma.retention.findMany({
+      where: { isActive: true },
+      orderBy: { code: 'asc' }
+    });
+    res.json(retentions);
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al obtener retenciones activas", detail: error.message });
+  }
+});
+
+// Crear una retención
+app.post("/api/retentions", authenticateToken, async (req: any, res) => {
+  const { code, name, percentage, description } = req.body;
+
+  // Solo admins pueden crear retenciones
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: "No tiene permiso para crear retenciones" });
+  }
+
+  try {
+    const retention = await prisma.retention.create({
+      data: { code, name, percentage, description }
+    });
+    res.status(201).json(retention);
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      res.status(400).json({ message: "Ya existe una retención con ese código" });
+    } else {
+      res.status(500).json({ message: "Error al crear retención", detail: error.message });
+    }
+  }
+});
+
+// Actualizar una retención
+app.put("/api/retentions/:id", authenticateToken, async (req: any, res) => {
+  const { id } = req.params;
+  const { code, name, percentage, description, isActive } = req.body;
+
+  // Solo admins pueden actualizar retenciones
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: "No tiene permiso para actualizar retenciones" });
+  }
+
+  try {
+    const retention = await prisma.retention.update({
+      where: { id: parseInt(id) },
+      data: { code, name, percentage, description, isActive }
+    });
+    res.json(retention);
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      res.status(400).json({ message: "Ya existe una retención con ese código" });
+    } else {
+      res.status(500).json({ message: "Error al actualizar retención", detail: error.message });
+    }
+  }
+});
+
+// Eliminar una retención
+app.delete("/api/retentions/:id", authenticateToken, async (req: any, res) => {
+  const { id } = req.params;
+
+  // Solo admins pueden eliminar retenciones
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: "No tiene permiso para eliminar retenciones" });
+  }
+
+  try {
+    await prisma.retention.delete({
+      where: { id: parseInt(id) }
+    });
+    res.json({ message: "Retención eliminada con éxito" });
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al eliminar retención", detail: error.message });
   }
 });
 

@@ -8,15 +8,18 @@ import { UserManagement } from './components/UserManagement'
 import { BudgetManagement } from './components/BudgetManagement'
 import { AdmCloudTransactions } from './components/AdmCloudTransactions'
 import { BoletinMedicion } from './components/BoletinMedicion'
+import { RetentionManagement } from './components/RetentionManagement'
 
 function App() {
   const { user, isLoading } = useAuth();
   const [view, setView] = useState<'login' | 'register'>('login');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'budget' | 'admcloud' | 'boletin'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'budget' | 'admcloud' | 'boletin' | 'retentions'>('dashboard');
   const [isEditingInNewTab, setIsEditingInNewTab] = useState(false);
   const [subcontractCount, setSubcontractCount] = useState<number>(0);
   const [loadingSubcontracts, setLoadingSubcontracts] = useState<boolean>(false);
   const [boletinesCount, setBoletinesCount] = useState<number>(0);
+  const [boletinesPendientes, setBoletinesPendientes] = useState<number>(0);
+  const [boletinesRechazados, setBoletinesRechazados] = useState<number>(0);
   const [loadingBoletines, setLoadingBoletines] = useState<boolean>(false);
 
   useEffect(() => {
@@ -62,7 +65,7 @@ function App() {
   // Cargar conteo total de boletines emitidos
   useEffect(() => {
     const fetchBoletinesCount = async () => {
-      if (!user?.accessIngenieria) return;
+      if (!user?.accessContabilidad) return;
       
       setLoadingBoletines(true);
       try {
@@ -76,7 +79,13 @@ function App() {
         if (response.ok) {
           const data = await response.json();
           setBoletinesCount(data.length);
-          console.log(`✅ Boletines cargados: ${data.length} boletines emitidos`);
+          
+          // Contar por estado
+          const pendientes = data.filter((b: any) => b.status === 'PENDIENTE').length;
+          const rechazados = data.filter((b: any) => b.status === 'RECHAZADO').length;
+          
+          setBoletinesPendientes(pendientes);
+          setBoletinesRechazados(rechazados);
         }
       } catch (error) {
         console.error('Error cargando conteo de boletines:', error);
@@ -86,7 +95,7 @@ function App() {
     };
 
     fetchBoletinesCount();
-  }, [user?.accessIngenieria]);
+  }, [user?.accessContabilidad]);
 
   if (isLoading) {
     return <div className="loading-screen">Cargando Sistema de Obra...</div>;
@@ -143,7 +152,7 @@ function App() {
                   </div>
                 </div>
               )}
-              {user?.accessIngenieria && (
+              {user?.accessContabilidad && (
                 <div className="dashboard-card">
                   <div className="dashboard-card-header">
                     <div className="dashboard-card-icon">📋</div>
@@ -164,16 +173,16 @@ function App() {
                   </div>
                   <div className="dashboard-card-footer">
                     <div className="footer-stat">
-                      <div className="footer-stat-value">{boletinesCount}</div>
+                      <div className="footer-stat-value">{loadingBoletines ? '...' : boletinesCount}</div>
                       <div className="footer-stat-label">Total</div>
                     </div>
-                    <div className="footer-stat">
-                      <div className="footer-stat-value">📄</div>
-                      <div className="footer-stat-label">Emitidos</div>
+                    <div className="footer-stat" style={{ borderLeft: '1px solid #e0e0e0', borderRight: '1px solid #e0e0e0' }}>
+                      <div className="footer-stat-value" style={{ color: '#ff9800' }}>{loadingBoletines ? '...' : boletinesPendientes}</div>
+                      <div className="footer-stat-label">Pendientes</div>
                     </div>
                     <div className="footer-stat">
-                      <div className="footer-stat-value">✓</div>
-                      <div className="footer-stat-label">Activos</div>
+                      <div className="footer-stat-value" style={{ color: '#f44336' }}>{loadingBoletines ? '...' : boletinesRechazados}</div>
+                      <div className="footer-stat-label">Rechazados</div>
                     </div>
                   </div>
                 </div>
@@ -222,6 +231,8 @@ function App() {
         return <AdmCloudWrapper />;
       case 'boletin':
         return <BoletinWrapper />;
+      case 'retentions':
+        return user?.role === 'admin' ? <RetentionWrapper /> : <div>No tiene permiso para acceder a esta sección.</div>;
       default:
         return <div>Sección no encontrada.</div>;
     }
@@ -246,6 +257,7 @@ function App() {
               onSelectBudget={() => setActiveTab('budget')}
               onSelectAdmCloud={() => setActiveTab('admcloud')}
               onSelectBoletin={() => setActiveTab('boletin')}
+              onSelectRetentions={() => setActiveTab('retentions')}
             />
           )}
           <main className="main-content">
@@ -294,6 +306,16 @@ const BoletinWrapper = () => (
       <p>Gestión de cubicaciones y solicitudes de pago</p>
     </header>
     <BoletinMedicion />
+  </>
+);
+
+const RetentionWrapper = () => (
+  <>
+    <header className="content-header">
+      <h1>Catálogo de Retenciones</h1>
+      <p>Administración de tipos de retención para boletines de medición</p>
+    </header>
+    <RetentionManagement />
   </>
 );
 

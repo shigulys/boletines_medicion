@@ -37,7 +37,10 @@ interface BoletinLine {
   taxType: string;
   taxPercent: number;
   taxAmount: number;
+  retentionPercent: number;
+  retentionAmount: number;
   totalLine: number;
+  selected?: boolean;
 }
 
 const formatCurrency = (num: number) => {
@@ -67,10 +70,22 @@ export const BoletinMedicion: React.FC = () => {
   const [savedBoletines, setSavedBoletines] = useState<any[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [isNewTab, setIsNewTab] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Catálogo de retenciones
+  const [availableRetentions, setAvailableRetentions] = useState<Array<{
+    id: number;
+    code: string;
+    name: string;
+    percentage: number;
+    description: string | null;
+    isActive: boolean;
+  }>>([]);
 
   useEffect(() => {
     fetchTransactions();
     fetchBoletinHistory();
+    fetchActiveRetentions();
     const params = new URLSearchParams(window.location.search);
     setIsNewTab(params.has('editBoletin') || params.has('generateBoletin') || params.has('boletinSelection'));
   }, [filterSubcontratos]);
@@ -109,16 +124,34 @@ export const BoletinMedicion: React.FC = () => {
 
   const handleStatusChange = async (id: number, status: string) => {
     const action = status === 'APROBADO' ? 'aprobar' : 'rechazar';
+    
+    let rejectionReason = '';
+    
+    // Si es rechazo, capturar el motivo
+    if (status === 'RECHAZADO') {
+      rejectionReason = prompt('Ingrese el motivo del rechazo:')?.trim() || '';
+      
+      if (!rejectionReason) {
+        alert('Debe proporcionar un motivo para el rechazo');
+        return;
+      }
+    }
+    
     if (!confirm(`¿Está seguro que desea ${action} este boletín?`)) return;
 
     try {
+      const body: any = { status };
+      if (status === 'RECHAZADO') {
+        body.rejectionReason = rejectionReason;
+      }
+      
       const response = await fetch(`http://localhost:5000/api/payment-requests/${id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify({ status })
+        body: JSON.stringify(body)
       });
 
       if (response.ok) {
@@ -135,11 +168,51 @@ export const BoletinMedicion: React.FC = () => {
 
   const fetchBoletinHistory = async () => {
     try {
+      console.log('📋 Cargando historial de boletines...');
       const response = await fetch('http://localhost:5000/api/payment-requests', {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
-      if (response.ok) setSavedBoletines(await response.json());
-    } catch { }
+      console.log('📡 Response status:', response.status);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Boletines recibidos:', data);
+        setSavedBoletines(data);
+      } else {
+        const error = await response.json();
+        console.error('❌ Error en respuesta:', error);
+      }
+    } catch (error) {
+      console.error('❌ Error al cargar boletines:', error);
+    }
+  };
+
+  const fetchActiveRetentions = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/retentions/active', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableRetentions(data);
+      }
+    } catch (err) {
+      console.error('Error cargando retenciones:', err);
+    }
+  };
+
+  const handleClose = () => {
+    if (hasUnsavedChanges) {
+      if (!confirm("Hay cambios sin guardar. ¿Está seguro que desea cerrar sin guardar?")) {
+        return;
+      }
+    }
+    if (isNewTab) {
+      window.close();
+    } else {
+      setSelectedTx(null);
+      setEditingId(null);
+      setHasUnsavedChanges(false);
+    }
   };
 
   const fetchTransactions = async () => {
@@ -193,6 +266,7 @@ export const BoletinMedicion: React.FC = () => {
     setSelectedTx(tx);
     setItemsLoading(true);
     setLinesToPay([]); // Reset boolean/quantities
+    setHasUnsavedChanges(false); // Nueva generación, sin cambios aún
     try {
       const response = await fetch(`http://localhost:5000/api/admcloud/transactions/${tx.ID}/items`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
@@ -203,14 +277,23 @@ export const BoletinMedicion: React.FC = () => {
         // Pre-poblar lineas con cantidad pendiente (Recibida - Ya solicitada en otros boletines)
         const initialLines = data.map((it: any) => {
           const available = it.ReceivedQuantity - it.PaidQuantity;
+          // Extraer solo el último número de recepción si hay múltiples
+          const allReceptions = it.ReceptionNumbers || '';
+          const receptionArray = allReceptions.split(',').map((r: string) => r.trim()).filter((r: string) => r);
+          const lastReception = receptionArray.length > 0 ? receptionArray[receptionArray.length - 1] : '';
+          
           return {
             externalItemID: it.ItemID,
             description: it.Name,
-            receptionNumbers: it.ReceptionNumbers || '',
+            receptionNumbers: lastReception,
             quantity: available > 0 ? available : 0, 
             unitPrice: it.Price,
             taxType: 'ITBIS 18%',
             taxPercent: 18,
+            taxAmount: 0,
+            retentionPercent: 0,
+            retentionAmount: 0,
+            totalLine: 0,
             selected: false
           };
         });
@@ -228,6 +311,7 @@ export const BoletinMedicion: React.FC = () => {
     setRetentionPercent(boletin.retentionPercent);
     setAdvancePercent(boletin.advancePercent);
     setIsrPercent(boletin.isrPercent);
+    setHasUnsavedChanges(false); // Cargando datos guardados
     
     // Buscar la transacción original en el listado
     const tx = transactions.find(t => t.ID === boletin.externalTxID);
@@ -264,14 +348,28 @@ export const BoletinMedicion: React.FC = () => {
           const alreadyPaidByOthers = it.PaidQuantity - (existingLine ? existingLine.quantity : 0);
           const available = it.ReceivedQuantity - alreadyPaidByOthers;
 
+          // Si hay una línea existente, usar su receptionNumbers, si no, extraer el último
+          let receptionNum = '';
+          if (existingLine) {
+            receptionNum = existingLine.receptionNumbers;
+          } else {
+            const allReceptions = it.ReceptionNumbers || '';
+            const receptionArray = allReceptions.split(',').map((r: string) => r.trim()).filter((r: string) => r);
+            receptionNum = receptionArray.length > 0 ? receptionArray[receptionArray.length - 1] : '';
+          }
+
           return {
             externalItemID: it.ItemID,
             description: it.Name,
-            receptionNumbers: existingLine ? existingLine.receptionNumbers : (it.ReceptionNumbers || ''),
+            receptionNumbers: receptionNum,
             quantity: existingLine ? existingLine.quantity : (available > 0 ? available : 0),
             unitPrice: it.Price,
             taxType: existingLine ? existingLine.taxType : 'ITBIS 18%',
             taxPercent: existingLine ? existingLine.taxPercent : 18,
+            taxAmount: existingLine ? existingLine.taxAmount : 0,
+            retentionPercent: existingLine ? existingLine.retentionPercent : 0,
+            retentionAmount: existingLine ? existingLine.retentionAmount : 0,
+            totalLine: existingLine ? existingLine.totalLine : 0,
             selected: !!existingLine
           };
         });
@@ -293,26 +391,31 @@ export const BoletinMedicion: React.FC = () => {
       newLines[index] = { ...newLines[index], [field]: value };
     }
     setLinesToPay(newLines);
+    setHasUnsavedChanges(true);
   };
 
   const calculateTotals = () => {
     const selected = linesToPay.filter(l => l.selected);
     let subTotal = 0;
     let totalTax = 0;
+    let totalRetentionByLine = 0;
 
     selected.forEach(l => {
       const st = l.quantity * l.unitPrice;
       const tax = st * (l.taxPercent / 100);
+      const retentionByLine = (st + tax) * ((l.retentionPercent || 0) / 100);
+      
       subTotal += st;
       totalTax += tax;
+      totalRetentionByLine += retentionByLine;
     });
 
     const retAmount = subTotal * (retentionPercent / 100);
     const advAmount = subTotal * (advancePercent / 100);
     const isrAmount = subTotal * (isrPercent / 100);
-    const net = (subTotal + totalTax) - retAmount - advAmount - isrAmount;
+    const net = (subTotal + totalTax) - totalRetentionByLine - retAmount - advAmount - isrAmount;
 
-    return { subTotal, totalTax, retAmount, advAmount, isrAmount, net };
+    return { subTotal, totalTax, retAmount, advAmount, isrAmount, totalRetentionByLine, net };
   };
 
   const saveBoletin = async () => {
@@ -383,6 +486,7 @@ export const BoletinMedicion: React.FC = () => {
 
       if (response.ok) {
         alert(editingId ? "Boletín actualizado con éxito" : "Boletín generado con éxito");
+        setHasUnsavedChanges(false);
         if (isNewTab) {
           window.close();
         } else {
@@ -417,8 +521,28 @@ export const BoletinMedicion: React.FC = () => {
     doc.text(`OC Referencia: ${boletin.docID}`, 14, 44);
     doc.text(`Proveedor: ${boletin.vendorName}`, 14, 50);
     doc.text(`Proyecto: ${boletin.projectName || 'General'}`, 14, 56);
+    
+    let currentHeaderY = 62;
+    
     if (boletin.receptionNumbers) {
-      doc.text(`Recepciones: ${boletin.receptionNumbers}`, 14, 62);
+      doc.text(`Recepciones: ${boletin.receptionNumbers}`, 14, currentHeaderY);
+      currentHeaderY += 6;
+    }
+    
+    // Mostrar estado y motivo de rechazo si aplica
+    if (boletin.status === 'RECHAZADO' && boletin.rejectionReason) {
+      doc.setFontSize(10);
+      doc.setTextColor(211, 47, 47); // Color rojo
+      doc.text(`ESTADO: RECHAZADO`, 14, currentHeaderY);
+      currentHeaderY += 6;
+      
+      // Dividir el motivo en múltiples líneas si es muy largo
+      const maxWidth = 180;
+      const reasonLines = doc.splitTextToSize(`Motivo: ${boletin.rejectionReason}`, maxWidth);
+      doc.text(reasonLines, 14, currentHeaderY);
+      currentHeaderY += (reasonLines.length * 5);
+      
+      doc.setTextColor(100); // Restaurar color
     }
 
     const tableColumn = ["Descripción", "Recepción", "Cantidad", "Precio Unit.", "ITBIS", "Total"];
@@ -438,7 +562,7 @@ export const BoletinMedicion: React.FC = () => {
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: boletin.receptionNumbers ? 68 : 62,
+      startY: currentHeaderY,
       theme: 'grid',
       headStyles: { 
         fillColor: [255, 255, 255], 
@@ -534,10 +658,47 @@ export const BoletinMedicion: React.FC = () => {
         <div className="card history-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
             <h2 style={{ margin: 0, fontSize: '1.8rem', color: '#1976d2' }}>Historial de Boletines Generados</h2>
-            <span style={{ fontSize: '1rem', color: '#666', fontWeight: '500' }}>
-              Total: <strong style={{ color: '#1976d2' }}>{savedBoletines.length}</strong> boletines
-            </span>
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'center', fontSize: '0.95rem' }}>
+              <span style={{ color: '#666', fontWeight: '500' }}>
+                Total: <strong style={{ color: '#1976d2', fontSize: '1.1rem' }}>{savedBoletines.length}</strong>
+              </span>
+              <span style={{ color: '#666', fontWeight: '500' }}>
+                Aprobados: <strong style={{ color: '#28a745', fontSize: '1.1rem' }}>{savedBoletines.filter(b => b.status === 'APROBADO').length}</strong>
+              </span>
+              <span style={{ color: '#666', fontWeight: '500' }}>
+                Rechazados: <strong style={{ color: '#dc3545', fontSize: '1.1rem' }}>{savedBoletines.filter(b => b.status === 'RECHAZADO').length}</strong>
+              </span>
+              <button 
+                onClick={() => fetchBoletinHistory()} 
+                style={{ 
+                  padding: '8px 16px', 
+                  backgroundColor: '#2196F3', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '4px', 
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: '500'
+                }}
+              >
+                🔄 Recargar
+              </button>
+            </div>
           </div>
+          {savedBoletines.length === 0 ? (
+            <div style={{ 
+              padding: '40px', 
+              textAlign: 'center', 
+              color: '#999',
+              backgroundColor: '#f9f9f9',
+              borderRadius: '8px',
+              fontSize: '1.1rem'
+            }}>
+              <p style={{ fontSize: '3rem', margin: '0 0 15px 0' }}>📋</p>
+              <p style={{ margin: 0, fontWeight: '500' }}>No hay boletines registrados</p>
+              <p style={{ margin: '10px 0 0 0', fontSize: '0.9rem' }}>Crea tu primer boletín seleccionando una Orden de Compra</p>
+            </div>
+          ) : (
           <div className="table-responsive">
             <table className="data-table history-table">
               <thead>
@@ -578,6 +739,20 @@ export const BoletinMedicion: React.FC = () => {
                       <span className={`status-badge-large status-${b.status.toLowerCase()}`}>
                         {b.status}
                       </span>
+                      {b.status === 'RECHAZADO' && b.rejectionReason && (
+                        <div style={{ 
+                          marginTop: '8px', 
+                          fontSize: '0.85rem', 
+                          color: '#d32f2f', 
+                          backgroundColor: '#ffebee', 
+                          padding: '6px 10px', 
+                          borderRadius: '4px',
+                          border: '1px solid #ffcdd2',
+                          textAlign: 'left'
+                        }}>
+                          <strong>Motivo:</strong> {b.rejectionReason}
+                        </div>
+                      )}
                     </td>
                     <td>
                       <div className="action-buttons-container-large">
@@ -608,12 +783,13 @@ export const BoletinMedicion: React.FC = () => {
               </tbody>
             </table>
           </div>
+          )}
           
           {/* Botón flotante para cerrar en nueva pestaña */}
           {isNewTab && (
             <button 
               className="floating-close-btn"
-              onClick={() => window.close()}
+              onClick={handleClose}
               title="Cerrar ventana"
             >
               ✕
@@ -832,14 +1008,7 @@ export const BoletinMedicion: React.FC = () => {
           <div className="header-info card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3>{editingId ? `Editando Boletín: ${savedBoletines.find(b=>b.id===editingId)?.docNumber}` : `Generando Boletín para: ${selectedTx.DocID}`}</h3>
-              <button className="btn-small" onClick={() => { 
-                if (isNewTab) {
-                  window.close();
-                } else {
-                  setSelectedTx(null); 
-                  setEditingId(null); 
-                }
-              }}>
+              <button className="btn-small" onClick={handleClose}>
                 {isNewTab ? 'Cerrar Ventana' : 'Cancelar'}
               </button>
             </div>
@@ -867,14 +1036,16 @@ export const BoletinMedicion: React.FC = () => {
                   <tr>
                     <th>Sel.</th>
                     <th>Descripción</th>
-                    <th style={{ width: '120px' }}>Recepción</th>
-                    <th style={{ width: '80px', textAlign: 'center' }}>Recibido</th>
+                    <th style={{ width: '80px', textAlign: 'center' }}>Contratado</th>
                     <th style={{ width: '80px', textAlign: 'center' }}>Anterior</th>
                     <th style={{ width: '80px', textAlign: 'center' }}>Disponible</th>
                     <th style={{ width: '100px', textAlign: 'center' }}>Cant. a Pagar</th>
+                    <th style={{ width: '140px' }}>Recepción</th>
                     <th>Precio Unit.</th>
                     <th>Impuesto</th>
-                    <th style={{ textAlign: 'right' }}>Subtotal</th>
+                    <th style={{ width: '180px' }}>Retención</th>
+                    <th style={{ textAlign: 'right', width: '100px' }}>Retenido</th>
+                    <th style={{ textAlign: 'right', width: '110px' }}>Subtotal</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -895,9 +1066,6 @@ export const BoletinMedicion: React.FC = () => {
                           />
                         </td>
                         <td>{line.description}</td>
-                        <td style={{ fontSize: '0.8rem', color: line.selected ? '#1976d2' : '#ccc', fontWeight: line.selected ? '600' : 'normal' }}>
-                          {line.selected ? (line.receptionNumbers || 'N/A') : '—'}
-                        </td>
                         <td style={{ textAlign: 'center' }}>{item?.ReceivedQuantity}</td>
                         <td style={{ textAlign: 'center', color: '#666' }}>{paidByOthers}</td>
                         <td style={{ textAlign: 'center', fontWeight: 'bold', color: available > 0 ? '#28a745' : '#d32f2f' }}>
@@ -920,6 +1088,23 @@ export const BoletinMedicion: React.FC = () => {
                           />
                           {isOverpaid && <div style={{ color: '#d32f2f', fontSize: '0.7rem', marginTop: '2px' }}>Excede disponible</div>}
                         </td>
+                        <td>
+                          <input 
+                            type="text" 
+                            value={line.receptionNumbers || ''}
+                            onChange={(e) => updateLine(idx, 'receptionNumbers', e.target.value)}
+                            placeholder="Ej: ICI-RIN00001"
+                            style={{ 
+                              width: '130px',
+                              fontSize: '0.85rem',
+                              padding: '4px 6px',
+                              border: '1px solid #ddd',
+                              borderRadius: '4px',
+                              backgroundColor: line.selected ? '#fff' : '#f5f5f5'
+                            }}
+                            disabled={!line.selected}
+                          />
+                        </td>
                         <td>${formatCurrency(line.unitPrice)}</td>
                       <td>
                         <select 
@@ -931,8 +1116,34 @@ export const BoletinMedicion: React.FC = () => {
                           <option value="Exento 0%">Exento 0%</option>
                         </select>
                       </td>
-                      <td style={{ textAlign: 'right' }}>
-                        ${formatCurrency(line.quantity * line.unitPrice)}
+                      <td>
+                        <select 
+                          value={line.retentionPercent || 0}
+                          onChange={(e) => updateLine(idx, 'retentionPercent', Number(e.target.value))}
+                          disabled={!line.selected}
+                          style={{ 
+                            width: '100%',
+                            fontSize: '0.8rem',
+                            padding: '5px 8px',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            backgroundColor: line.selected ? '#fff' : '#f5f5f5',
+                            cursor: line.selected ? 'pointer' : 'not-allowed'
+                          }}
+                        >
+                          <option value={0}>Sin retención (0%)</option>
+                          {availableRetentions.map(ret => (
+                            <option key={ret.id} value={ret.percentage}>
+                              {ret.name} - {ret.percentage}%
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ textAlign: 'right', color: '#d32f2f', fontWeight: '500' }}>
+                        -${formatCurrency((line.quantity * line.unitPrice * (1 + line.taxPercent / 100)) * ((line.retentionPercent || 0) / 100))}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                        ${formatCurrency((line.quantity * line.unitPrice * (1 + line.taxPercent / 100)) * (1 - (line.retentionPercent || 0) / 100))}
                       </td>
                     </tr>
                   );
@@ -951,7 +1162,10 @@ export const BoletinMedicion: React.FC = () => {
                   <input 
                     type="number" 
                     value={retentionPercent} 
-                    onChange={(e) => setRetentionPercent(Number(e.target.value))}
+                    onChange={(e) => {
+                      setRetentionPercent(Number(e.target.value));
+                      setHasUnsavedChanges(true);
+                    }}
                     style={{ width: '80px' }}
                   /> %
                   <span className="amount-preview">-${formatCurrency(totals.retAmount)}</span>
@@ -963,7 +1177,10 @@ export const BoletinMedicion: React.FC = () => {
                   <input 
                     type="number" 
                     value={advancePercent} 
-                    onChange={(e) => setAdvancePercent(Number(e.target.value))}
+                    onChange={(e) => {
+                      setAdvancePercent(Number(e.target.value));
+                      setHasUnsavedChanges(true);
+                    }}
                     style={{ width: '80px' }}
                   /> %
                   <span className="amount-preview">-${formatCurrency(totals.advAmount)}</span>
@@ -975,7 +1192,10 @@ export const BoletinMedicion: React.FC = () => {
                   <input 
                     type="number" 
                     value={isrPercent} 
-                    onChange={(e) => setIsrPercent(Number(e.target.value))}
+                    onChange={(e) => {
+                      setIsrPercent(Number(e.target.value));
+                      setHasUnsavedChanges(true);
+                    }}
                     style={{ width: '80px' }}
                   /> %
                   <span className="amount-preview">-${formatCurrency(totals.isrAmount)}</span>
@@ -989,6 +1209,9 @@ export const BoletinMedicion: React.FC = () => {
               <p>ITBIS: <strong>${formatCurrency(totals.totalTax)}</strong></p>
               <p>Total Bruto: <strong>${formatCurrency(totals.subTotal + totals.totalTax)}</strong></p>
               <hr />
+              {totals.totalRetentionByLine > 0 && (
+                <p style={{ color: '#d32f2f' }}>Retenciones por Línea: <strong>-${formatCurrency(totals.totalRetentionByLine)}</strong></p>
+              )}
               <p style={{ fontSize: '1.2rem', color: '#1976d2' }}>
                 Neto a Pagar: <strong>${formatCurrency(totals.net)}</strong>
               </p>
@@ -1007,7 +1230,7 @@ export const BoletinMedicion: React.FC = () => {
           {isNewTab && (
             <button 
               className="floating-close-btn"
-              onClick={() => window.close()}
+              onClick={handleClose}
               title="Cerrar ventana"
             >
               ✕

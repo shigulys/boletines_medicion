@@ -86,6 +86,12 @@ a:hover {
 .sidebar-brand {
   padding: 1.2rem;
   border-bottom: 1px solid #eee;
+  transition: all 0.3s ease;
+}
+
+.sidebar-brand:hover {
+  background-color: #f8f9fa;
+  border-bottom-color: #0056b3;
 }
 
 .sidebar-brand h3 {
@@ -93,6 +99,8 @@ a:hover {
   color: #0056b3;
   font-size: 1.1rem;
   letter-spacing: 0.8px;
+  display: flex;
+  align-items: center;
 }
 
 .sidebar-brand p {
@@ -100,6 +108,9 @@ a:hover {
   font-size: 0.75rem;
   color: #888;
   text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
 }
 
 .sidebar-user {
@@ -205,19 +216,6 @@ a:hover {
   list-style: none;
   padding: 0.5rem 0 0.5rem 0.8rem;
   margin: 0;
-}
-
-.accordion-content li {
-  padding: 8px 12px;
-  font-size: 0.8rem;
-  color: #666;
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.accordion-content li:hover {
-  color: #0056b3;
-  background-color: #f8f9fa;
 }
 
 .sidebar-quick-info {
@@ -657,4 +655,46 @@ table {
 
 td, th {
   color: #333 !important;
+}
+
+/* Estilos mejorados para íconos del menú lateral */
+.accordion-header span {
+  display: flex;
+  align-items: center;
+  transition: all 0.3s ease;
+}
+
+.accordion-content li {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  color: #666;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.accordion-content li:hover {
+  color: #0056b3;
+  background-color: #f8f9fa;
+  transform: translateX(3px);
+}
+
+.accordion-content li span {
+  display: inline-flex;
+  align-items: center;
+  font-size: 1rem;
+}
+
+.logout-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+
+.logout-button:hover {
+  transform: translateX(-3px);
 }
