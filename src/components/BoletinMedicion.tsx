@@ -202,6 +202,34 @@ export const BoletinMedicion: React.FC = () => {
     }
   };
 
+  const handleGeneratePDF = async (boletin: any) => {
+    let boletinWithDates = { ...boletin };
+    
+    // Si el boletín no tiene fechas de medición, intentar obtenerlas de AdmCloud
+    if ((!boletin.measurementStartDate || !boletin.measurementEndDate) && boletin.externalTxID) {
+      try {
+        console.log('📅 Consultando fechas de medición para boletín:', boletin.docNumber);
+        const receptionsResponse = await fetch(`http://localhost:5000/api/admcloud/transactions/${boletin.externalTxID}/receptions`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        
+        if (receptionsResponse.ok) {
+          const receptions = await receptionsResponse.json();
+          const receptionWithDates = receptions.find((r: any) => r.MeasurementStartDate && r.MeasurementEndDate);
+          if (receptionWithDates) {
+            console.log('✅ Fechas encontradas:', receptionWithDates.MeasurementStartDate, receptionWithDates.MeasurementEndDate);
+            boletinWithDates.measurementStartDate = receptionWithDates.MeasurementStartDate;
+            boletinWithDates.measurementEndDate = receptionWithDates.MeasurementEndDate;
+          }
+        }
+      } catch (error) {
+        console.error('Error al obtener fechas de medición:', error);
+      }
+    }
+    
+    generatePDF(boletinWithDates);
+  };
+
   const fetchBoletinHistory = async () => {
     try {
       console.log('🔄 Recargando historial de boletines...');
@@ -729,7 +757,10 @@ export const BoletinMedicion: React.FC = () => {
       retentionAmount: boletin.retentionAmount,
       advanceAmount: boletin.advanceAmount,
       isrAmount: boletin.isrAmount,
-      netTotal: boletin.netTotal
+      netTotal: boletin.netTotal,
+      date: boletin.date,
+      measurementStartDate: boletin.measurementStartDate,
+      measurementEndDate: boletin.measurementEndDate
     });
     
     const doc = new jsPDF();
@@ -742,7 +773,10 @@ export const BoletinMedicion: React.FC = () => {
     doc.setFontSize(11);
     doc.setTextColor(100);
     doc.text(`N° Boletín: ${boletin.docNumber}`, 14, 32);
-    doc.text(`Fecha: ${new Date(boletin.date).toLocaleDateString('es-ES')}`, 14, 38);
+    
+    // Validar fecha antes de formatear
+    const fechaBoletin = boletin.date ? new Date(boletin.date) : new Date();
+    doc.text(`Fecha: ${fechaBoletin.toLocaleDateString('es-ES')}`, 14, 38);
     doc.text(`OC Referencia: ${boletin.docID}`, 14, 44);
     doc.text(`Proveedor: ${boletin.vendorName}`, 14, 50);
     
@@ -1267,7 +1301,7 @@ export const BoletinMedicion: React.FC = () => {
                     </td>
                     <td>
                       <div className="action-buttons-container-large">
-                        <button className="btn-action-large btn-pdf" onClick={() => generatePDF(b)}>
+                        <button className="btn-action-large btn-pdf" onClick={() => handleGeneratePDF(b)}>
                           <span>📄</span> PDF
                         </button>
                         {b.status === "PENDIENTE" && (
@@ -1344,7 +1378,7 @@ export const BoletinMedicion: React.FC = () => {
                           </td>
                           <td>
                             <div className="action-buttons-container-large">
-                              <button className="btn-action-large btn-pdf" onClick={() => generatePDF(b)}>
+                              <button className="btn-action-large btn-pdf" onClick={() => handleGeneratePDF(b)}>
                                 <span>📄</span> PDF
                               </button>
                               {b.status === "PENDIENTE" && (
