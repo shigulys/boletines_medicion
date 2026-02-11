@@ -76,15 +76,17 @@ model Measurement {
 }
 
 model PaymentRequest {
-  id                Int                  @id @default(autoincrement())
-  docNumber         String               @unique // Correlativo interno o num boletín
-  externalTxID      String               // AdmCloud TransID (OC)
-  docID             String               // AdmCloud DocID (Ej: OC-001)
-  vendorName        String
-  vendorFiscalID    String?              // RNC o Cédula del proveedor
-  projectName       String?
-  receptionNumbers  String?              // Ej: ICI-RIN00001, ICI-RIN00002
-  date              DateTime             @default(now())
+  id                   Int                  @id @default(autoincrement())
+  docNumber            String               @unique // Correlativo interno o num boletín
+  externalTxID         String               // AdmCloud TransID (OC)
+  docID                String               // AdmCloud DocID (Ej: OC-001)
+  vendorName           String
+  vendorFiscalID       String?              // RNC o Cédula del proveedor
+  projectName          String?
+  receptionNumbers     String?              // Ej: ICI-RIN00001, ICI-RIN00002
+  measurementStartDate DateTime?            // Periodo de medición - desde
+  measurementEndDate   DateTime?            // Periodo de medición - hasta
+  date                 DateTime             @default(now())
   subTotal          Float
   taxAmount         Float
   retentionPercent  Float                @default(0) // Ej: 5% Fondo Reparo

@@ -479,6 +479,8 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
             t.[TaxAmount],
             t.[TotalAmount],
             t.[DepartmentID],
+            t.[CUSTOM_Fechadesde] as MeasurementStartDate,
+            t.[CUSTOM_Fechahasta] as MeasurementEndDate,
             r.[FullName] as VendorName,
             r.[FiscalID] as VendorFiscalID,
             p.[Name] as ProjectName
@@ -528,6 +530,8 @@ app.get("/api/admcloud/transactions/:id", authenticateToken, async (req, res) =>
             t.[TaxAmount],
             t.[TotalAmount],
             t.[DepartmentID],
+            t.[CUSTOM_Fechadesde] as MeasurementStartDate,
+            t.[CUSTOM_Fechahasta] as MeasurementEndDate,
             r.[FullName] as VendorName,
             r.[FiscalID] as VendorFiscalID,
             p.[Name] as ProjectName
@@ -547,6 +551,49 @@ app.get("/api/admcloud/transactions/:id", authenticateToken, async (req, res) =>
   } catch (error) {
     console.error("Error fetching AdmCloud transaction:", error);
     res.status(500).json({ message: "Error al consultar AdmCloud" });
+  }
+});
+
+// Get Receptions for a specific Purchase Order
+app.get("/api/admcloud/transactions/:id/receptions", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await connectAdmCloud();
+    
+    const query = `
+      SELECT DISTINCT
+          rt.[ID],
+          rt.[DocID],
+          rt.[DocType],
+          rt.[DocDate],
+          rt.[Reference],
+          rt.[CUSTOM_Fechadesde] as MeasurementStartDate,
+          rt.[CUSTOM_Fechahasta] as MeasurementEndDate
+      FROM [dbo].[SA_Trans_Items] ri
+      JOIN [dbo].[SA_Transactions] rt ON ri.[TransID] = rt.[ID]
+      WHERE ri.[SourceTransactionID] = @transId
+      AND rt.[DocType] = 'RECEPTION'
+      AND rt.[Void] = 0
+      ORDER BY rt.[DocDate] DESC
+    `;
+    
+    const result = await pool.request()
+      .input('transId', id)
+      .query(query);
+    
+    console.log('📦 Recepciones encontradas para OC:', id, '→', result.recordset.length);
+    if (result.recordset.length > 0) {
+      console.log('📅 Fechas en recepciones:', result.recordset.map(r => ({
+        DocID: r.DocID,
+        StartDate: r.MeasurementStartDate,
+        EndDate: r.MeasurementEndDate
+      })));
+    }
+    
+    res.json(result.recordset);
+  } catch (error) {
+    console.error("Error fetching receptions:", error);
+    res.status(500).json({ message: "Error al consultar recepciones de AdmCloud" });
   }
 });
 
@@ -671,7 +718,7 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
   const { 
     externalTxID, docID, vendorName, vendorFiscalID, projectName, 
     lines, retentionPercent, advancePercent, isrPercent,
-    receptionNumbers 
+    receptionNumbers, measurementStartDate, measurementEndDate
   } = req.body;
 
   try {
@@ -724,6 +771,8 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
         vendorFiscalID,
         projectName,
         receptionNumbers,
+        measurementStartDate: measurementStartDate ? new Date(measurementStartDate) : null,
+        measurementEndDate: measurementEndDate ? new Date(measurementEndDate) : null,
         subTotal,
         taxAmount,
         retentionPercent,
@@ -759,7 +808,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { 
     lines, retentionPercent, advancePercent, isrPercent,
-    receptionNumbers, vendorFiscalID 
+    receptionNumbers, vendorFiscalID, measurementStartDate, measurementEndDate
   } = req.body;
 
   try {
@@ -833,6 +882,8 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
           netTotal,
           receptionNumbers,
           vendorFiscalID,
+          measurementStartDate: measurementStartDate ? new Date(measurementStartDate) : null,
+          measurementEndDate: measurementEndDate ? new Date(measurementEndDate) : null,
           lines: { create: formattedLines }
         },
         include: { lines: true }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '../context/AuthContext';
+import * as XLSX from 'xlsx';
 
 interface Transaction {
   ID: string;
@@ -13,6 +14,8 @@ interface Transaction {
   VendorName?: string;
   VendorFiscalID?: string;
   ProjectName?: string;
+  MeasurementStartDate?: string;
+  MeasurementEndDate?: string;
   TotalAmount: number;
 }
 
@@ -73,6 +76,8 @@ export const BoletinMedicion: React.FC = () => {
   const [retentionPercent, setRetentionPercent] = useState(0);
   const [advancePercent, setAdvancePercent] = useState(0);
   const [isrPercent, setIsrPercent] = useState(0); // Nueva: Retención ISR
+  const [measurementStartDate, setMeasurementStartDate] = useState<string | null>(null);
+  const [measurementEndDate, setMeasurementEndDate] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [viewHistory, setViewHistory] = useState(false);
   const [savedBoletines, setSavedBoletines] = useState<any[]>([]);
@@ -238,6 +243,8 @@ export const BoletinMedicion: React.FC = () => {
     } else {
       setSelectedTx(null);
       setEditingId(null);
+      setMeasurementStartDate(null);
+      setMeasurementEndDate(null);
       setHasUnsavedChanges(false);
     }
   };
@@ -295,12 +302,36 @@ export const BoletinMedicion: React.FC = () => {
     setLinesToPay([]); // Reset boolean/quantities
     setHasUnsavedChanges(false); // Nueva generación, sin cambios aún
     try {
+      // Consultar recepciones para obtener fechas de medición
+      const receptionsResponse = await fetch(`http://localhost:5000/api/admcloud/transactions/${tx.ID}/receptions`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      
+      if (receptionsResponse.ok) {
+        const receptions = await receptionsResponse.json();
+        console.log('📦 Recepciones obtenidas:', receptions.length);
+        
+        // Buscar la primera recepción con fechas de medición
+        const receptionWithDates = receptions.find((r: any) => r.MeasurementStartDate && r.MeasurementEndDate);
+        if (receptionWithDates) {
+          console.log('✅ Fechas encontradas en recepción:', receptionWithDates.DocID, receptionWithDates.MeasurementStartDate, receptionWithDates.MeasurementEndDate);
+          setMeasurementStartDate(receptionWithDates.MeasurementStartDate);
+          setMeasurementEndDate(receptionWithDates.MeasurementEndDate);
+        } else {
+          console.log('⚠️ No se encontraron fechas de medición en las recepciones');
+          setMeasurementStartDate(null);
+          setMeasurementEndDate(null);
+        }
+      }
+      
+      // Consultar items de la OC
       const response = await fetch(`http://localhost:5000/api/admcloud/transactions/${tx.ID}/items`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (response.ok) {
         const data = await response.json();
         setItems(data);
+        
         // Pre-poblar lineas con cantidad pendiente (Recibida - Ya solicitada en otros boletines)
         const initialLines = data.map((it: any) => {
           const available = it.ReceivedQuantity - it.PaidQuantity;
@@ -339,6 +370,8 @@ export const BoletinMedicion: React.FC = () => {
     setRetentionPercent(boletin.retentionPercent);
     setAdvancePercent(boletin.advancePercent);
     setIsrPercent(boletin.isrPercent);
+    setMeasurementStartDate(boletin.measurementStartDate || null);
+    setMeasurementEndDate(boletin.measurementEndDate || null);
     setHasUnsavedChanges(false); // Cargando datos guardados
     
     // Buscar la transacción original en el listado
@@ -364,6 +397,22 @@ export const BoletinMedicion: React.FC = () => {
     setItemsLoading(true);
     setViewHistory(false);
     try {
+      // Consultar recepciones para obtener fechas de medición si no están en el boletín guardado
+      if (!boletin.measurementStartDate || !boletin.measurementEndDate) {
+        const receptionsResponse = await fetch(`http://localhost:5000/api/admcloud/transactions/${boletin.externalTxID}/receptions`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        
+        if (receptionsResponse.ok) {
+          const receptions = await receptionsResponse.json();
+          const receptionWithDates = receptions.find((r: any) => r.MeasurementStartDate && r.MeasurementEndDate);
+          if (receptionWithDates) {
+            setMeasurementStartDate(receptionWithDates.MeasurementStartDate);
+            setMeasurementEndDate(receptionWithDates.MeasurementEndDate);
+          }
+        }
+      }
+      
       // Obtener los datos completos de la transacción desde AdmCloud para tener el FiscalID actualizado
       const txResponse = await fetch(`http://localhost:5000/api/admcloud/transactions/${boletin.externalTxID}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
@@ -554,6 +603,8 @@ export const BoletinMedicion: React.FC = () => {
           vendorName: selectedTx.VendorName,
           vendorFiscalID: selectedTx.VendorFiscalID,
           projectName: selectedTx.ProjectName,
+          measurementStartDate: selectedTx.MeasurementStartDate,
+          measurementEndDate: selectedTx.MeasurementEndDate,
           retentionPercent,
           advancePercent,
           isrPercent,
@@ -578,6 +629,8 @@ export const BoletinMedicion: React.FC = () => {
           setSelectedTx(null);
           setLinesToPay([]);
           setEditingId(null);
+          setMeasurementStartDate(null);
+          setMeasurementEndDate(null);
           fetchBoletinHistory();
         }
       } else {
@@ -589,6 +642,83 @@ export const BoletinMedicion: React.FC = () => {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const exportToExcel = () => {
+    // Preparar datos para Excel
+    const data: any[] = [];
+    
+    // Por cada proyecto, agregar sus órdenes
+    Object.entries(groupedTransactions).forEach(([projectName, txs], index) => {
+      // Filas de órdenes del proyecto
+      txs.forEach((tx, txIndex) => {
+        data.push({
+          'Proyecto': txIndex === 0 ? projectName : '', // Solo mostrar nombre del proyecto en la primera fila
+          'Doc ID': tx.DocID,
+          'Proveedor': tx.VendorName?.toUpperCase() || '',
+          'RNC/Cédula': tx.VendorFiscalID || '',
+          'Fecha OC': new Date(tx.DocDate).toLocaleDateString('es-ES'),
+          'Total OC': tx.TotalAmount // Número directo, no formateado
+        });
+      });
+      
+      // Fila vacía entre proyectos (excepto después del último)
+      if (index < Object.keys(groupedTransactions).length - 1) {
+        data.push({
+          'Proyecto': '',
+          'Doc ID': '',
+          'Proveedor': '',
+          'RNC/Cédula': '',
+          'Fecha OC': '',
+          'Total OC': null
+        });
+      }
+    });
+    
+    // Fila vacía antes del total
+    data.push({
+      'Proyecto': '',
+      'Doc ID': '',
+      'Proveedor': '',
+      'RNC/Cédula': '',
+      'Fecha OC': '',
+      'Total OC': null
+    });
+    
+    // Total general
+    const totalGeneral = filteredTxs.reduce((sum, tx) => sum + tx.TotalAmount, 0);
+    data.push({
+      'Proyecto': 'TOTAL GENERAL',
+      'Doc ID': '',
+      'Proveedor': '',
+      'RNC/Cédula': '',
+      'Fecha OC': `${filteredTxs.length} ${filteredTxs.length === 1 ? 'orden' : 'órdenes'}`,
+      'Total OC': totalGeneral // Número directo
+    });
+    
+    // Crear hoja de cálculo
+    const ws = XLSX.utils.json_to_sheet(data);
+    
+    // Establecer anchos de columnas
+    ws['!cols'] = [
+      { wch: 40 }, // Proyecto
+      { wch: 15 }, // Doc ID
+      { wch: 30 }, // Proveedor
+      { wch: 15 }, // RNC/Cédula
+      { wch: 12 }, // Fecha OC
+      { wch: 18 }  // Total OC
+    ];
+    
+    // Crear libro y agregar hoja
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Órdenes por Proyecto');
+    
+    // Generar nombre de archivo con fecha
+    const fecha = new Date().toISOString().split('T')[0];
+    const fileName = `OC_por_Proyecto_${fecha}.xlsx`;
+    
+    // Descargar archivo
+    XLSX.writeFile(wb, fileName);
   };
 
   const generatePDF = (boletin: any) => {
@@ -624,6 +754,14 @@ export const BoletinMedicion: React.FC = () => {
     } else {
       doc.text(`Proyecto: ${boletin.projectName || 'General'}`, 14, 56);
       currentHeaderY = 62;
+    }
+    
+    if (boletin.measurementStartDate && boletin.measurementEndDate) {
+      // Parsear fechas sin problemas de zona horaria
+      const startDate = new Date(boletin.measurementStartDate.split('T')[0] + 'T12:00:00').toLocaleDateString('es-ES');
+      const endDate = new Date(boletin.measurementEndDate.split('T')[0] + 'T12:00:00').toLocaleDateString('es-ES');
+      doc.text(`Periodo: Desde ${startDate} y hasta ${endDate}`, 14, currentHeaderY);
+      currentHeaderY += 6;
     }
     
     if (boletin.receptionNumbers) {
@@ -1349,7 +1487,10 @@ export const BoletinMedicion: React.FC = () => {
                 </div>
               ) : (
               <>
-              {Object.entries(groupedTransactions).map(([projectName, txs]) => (
+              {Object.entries(groupedTransactions).map(([projectName, txs]) => {
+                const projectTotal = txs.reduce((sum, tx) => sum + tx.TotalAmount, 0);
+                
+                return (
                 <div key={projectName} style={{ marginBottom: '40px' }}>
                   <h4 style={{ 
                     background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', 
@@ -1362,10 +1503,18 @@ export const BoletinMedicion: React.FC = () => {
                     boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
                     marginBottom: '15px'
                   }}>
-                    <span style={{ fontSize: '1.1rem' }}>Proyecto: <strong>{projectName}</strong></span>
-                    <span style={{ fontSize: '0.9rem', background: '#e3f2fd', color: '#1976d2', padding: '6px 16px', borderRadius: '20px', fontWeight: 'bold' }}>
-                      {txs.length} {txs.length === 1 ? 'Orden' : 'Órdenes'}
-                    </span>
+                    <div>
+                      <span style={{ fontSize: '1.1rem' }}>Proyecto: <strong>{projectName}</strong></span>
+                      <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '5px' }}>
+                        {txs.length} {txs.length === 1 ? 'Orden' : 'Órdenes'}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#28a745' }}>
+                        ${formatCurrency(projectTotal)}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#666' }}>Total Proyecto</div>
+                    </div>
                   </h4>
                   <table className="data-table oc-table">
                     <thead>
@@ -1399,7 +1548,8 @@ export const BoletinMedicion: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
-              ))}
+              );
+              })}
               
               {/* Total General de Órdenes */}
               {filteredTxs.length > 0 && (
@@ -1417,8 +1567,27 @@ export const BoletinMedicion: React.FC = () => {
                         📊 Resumen Total de Órdenes
                       </h4>
                       <p style={{ margin: 0, color: '#1565c0', fontSize: '0.9rem' }}>
-                        {filteredTxs.length} {filteredTxs.length === 1 ? 'orden generada' : 'órdenes generadas'}
+                        {filteredTxs.length} {filteredTxs.length === 1 ? 'orden generada' : 'órdenes generadas'} • {Object.keys(groupedTransactions).length} {Object.keys(groupedTransactions).length === 1 ? 'proyecto' : 'proyectos'}
                       </p>
+                      <button
+                        onClick={exportToExcel}
+                        style={{
+                          marginTop: '12px',
+                          padding: '10px 20px',
+                          backgroundColor: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '0.9rem',
+                          fontWeight: '600',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}
+                      >
+                        <span>📊</span> Exportar a Excel
+                      </button>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: '0.85rem', color: '#1565c0', marginBottom: '5px' }}>
@@ -1466,6 +1635,12 @@ export const BoletinMedicion: React.FC = () => {
               <p><strong>RNC/Cédula:</strong> {selectedTx.VendorFiscalID}</p>
             )}
             <p><strong>Proyecto:</strong> {selectedTx.ProjectName || 'General'}</p>
+            {measurementStartDate && measurementEndDate && (() => {
+              // Parsear fechas sin problemas de zona horaria
+              const startDate = new Date(measurementStartDate.split('T')[0] + 'T12:00:00').toLocaleDateString('es-ES');
+              const endDate = new Date(measurementEndDate.split('T')[0] + 'T12:00:00').toLocaleDateString('es-ES');
+              return <p><strong>Periodo:</strong> Desde {startDate} y hasta {endDate}</p>;
+            })()}
             {(() => {
               const selectedReceptionSet = new Set<string>();
               linesToPay.forEach((line) => {
@@ -1722,6 +1897,52 @@ export const BoletinMedicion: React.FC = () => {
                   <strong style={{ fontSize: '1.4rem', color: '#1976d2' }}>${formatCurrency(totals.net)}</strong>
                 </div>
               </div>
+              
+              <button 
+                className="btn-secondary" 
+                style={{ marginTop: '10px', width: '100%', padding: '12px', fontSize: '0.95rem', fontWeight: '600', background: '#6c757d' }}
+                disabled={linesToPay.filter(l=>l.selected).length === 0}
+                onClick={() => {
+                  console.log('🔍 DEBUG Vista Previa - measurementStartDate:', measurementStartDate);
+                  console.log('🔍 DEBUG Vista Previa - measurementEndDate:', measurementEndDate);
+                  console.log('🔍 DEBUG Vista Previa - selectedTx:', selectedTx);
+                  console.log('🔍 DEBUG Vista Previa - linesToPay seleccionadas:', linesToPay.filter(l=>l.selected).length);
+                  
+                  // Calcular totales
+                  const totalsCalc = calculateTotals();
+                  console.log('💰 Totales calculados:', totalsCalc);
+                  
+                  const tempBoletin = {
+                    docNumber: editingId ? savedBoletines.find(b=>b.id===editingId)?.docNumber : 'PREVIEW',
+                    date: new Date(),
+                    docID: selectedTx?.DocID || 'N/A',
+                    vendorName: selectedTx?.VendorName || 'N/A',
+                    vendorFiscalID: selectedTx?.VendorFiscalID || '',
+                    projectName: selectedTx?.ProjectName || 'General',
+                    measurementStartDate,
+                    measurementEndDate,
+                    receptionNumbers: [...new Set(linesToPay.filter(l=>l.selected).flatMap(l => l.receptionNumbers.split(',').map((r:string) => r.trim()).filter((r:string)=>r)))].join(', '),
+                    lines: linesToPay.filter(l=>l.selected),
+                    retentionPercent,
+                    advancePercent,
+                    isrPercent,
+                    status: editingId ? savedBoletines.find(b=>b.id===editingId)?.status : 'PENDIENTE',
+                    rejectionReason: editingId ? savedBoletines.find(b=>b.id===editingId)?.rejectionReason : null,
+                    // Agregar totales calculados
+                    subTotal: totalsCalc.subTotal,
+                    taxAmount: totalsCalc.totalTax,
+                    retentionAmount: totalsCalc.retAmount,
+                    advanceAmount: totalsCalc.advAmount,
+                    isrAmount: totalsCalc.isrAmount,
+                    netTotal: totalsCalc.net
+                  };
+                  
+                  console.log('📄 Generando PDF con objeto completo:', tempBoletin);
+                  generatePDF(tempBoletin);
+                }}
+              >
+                📄 Vista Previa PDF
+              </button>
               
               <button 
                 className="btn-primary" 
