@@ -169,21 +169,15 @@ export const BoletinMedicion: React.FC = () => {
 
   const fetchBoletinHistory = async () => {
     try {
-      console.log('📋 Cargando historial de boletines...');
       const response = await fetch('http://localhost:5000/api/payment-requests', {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
-      console.log('📡 Response status:', response.status);
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Boletines recibidos:', data);
         setSavedBoletines(data);
-      } else {
-        const error = await response.json();
-        console.error('❌ Error en respuesta:', error);
       }
     } catch (error) {
-      console.error('❌ Error al cargar boletines:', error);
+      console.error('Error al cargar boletines:', error);
     }
   };
 
@@ -371,6 +365,7 @@ export const BoletinMedicion: React.FC = () => {
             taxAmount: existingLine ? existingLine.taxAmount : 0,
             retentionPercent: existingLine ? existingLine.retentionPercent : 0,
             retentionAmount: existingLine ? existingLine.retentionAmount : 0,
+            itbisRetentionPercent: existingLine ? existingLine.itbisRetentionPercent : 0,
             totalLine: existingLine ? existingLine.totalLine : 0,
             selected: !!existingLine
           };
@@ -1147,8 +1142,8 @@ export const BoletinMedicion: React.FC = () => {
                     <th>Precio Unit.</th>
                     <th>Impuesto</th>
                     <th style={{ textAlign: 'right', width: '100px' }}>Total Impuesto</th>
-                    <th style={{ width: '110px' }}>Ret. ITBIS %</th>
-                    <th style={{ width: '180px' }}>Retención</th>
+                    <th style={{ width: '160px' }}>Ret. ITBIS %</th>
+                    <th style={{ width: '160px' }}>Retención</th>
                     <th style={{ textAlign: 'right', width: '100px' }}>Retenido</th>
                     <th style={{ textAlign: 'right', width: '110px' }}>Subtotal</th>
                   </tr>
@@ -1230,9 +1225,9 @@ export const BoletinMedicion: React.FC = () => {
                           onChange={(e) => updateLine(idx, 'itbisRetentionPercent', Number(e.target.value))}
                           disabled={!line.selected || line.taxPercent === 0}
                           style={{ 
-                            width: '100%',
-                            fontSize: '0.8rem',
-                            padding: '5px 8px',
+                            width: '160px',
+                            fontSize: '0.85rem',
+                            padding: '6px 10px',
                             border: '1px solid #ddd',
                             borderRadius: '4px',
                             backgroundColor: (line.selected && line.taxPercent > 0) ? '#fff' : '#f5f5f5',
@@ -1250,9 +1245,9 @@ export const BoletinMedicion: React.FC = () => {
                           onChange={(e) => updateLine(idx, 'retentionPercent', Number(e.target.value))}
                           disabled={!line.selected}
                           style={{ 
-                            width: '100%',
-                            fontSize: '0.8rem',
-                            padding: '5px 8px',
+                            width: '160px',
+                            fontSize: '0.85rem',
+                            padding: '6px 10px',
                             border: '1px solid #ddd',
                             borderRadius: '4px',
                             backgroundColor: line.selected ? '#fff' : '#f5f5f5',
