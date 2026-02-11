@@ -11,6 +11,7 @@ interface Transaction {
   Reference: string | null;
   Status: number;
   VendorName?: string;
+  VendorFiscalID?: string;
   ProjectName?: string;
   TotalAmount: number;
 }
@@ -61,6 +62,12 @@ export const BoletinMedicion: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const [filterSubcontratos, setFilterSubcontratos] = useState(false);
 
+  // Filtros de historial
+  const [statusFilter, setStatusFilter] = useState<string>('TODOS');
+  const [searchHistory, setSearchHistory] = useState('');
+  const [groupByProject, setGroupByProject] = useState(true);
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+
   // Boletin Logic State
   const [linesToPay, setLinesToPay] = useState<any[]>([]);
   const [retentionPercent, setRetentionPercent] = useState(0);
@@ -89,7 +96,30 @@ export const BoletinMedicion: React.FC = () => {
     fetchActiveRetentions();
     const params = new URLSearchParams(window.location.search);
     setIsNewTab(params.has('editBoletin') || params.has('generateBoletin') || params.has('boletinSelection'));
+
+    // Escuchar mensajes de otras ventanas para recargar boletines
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'boletinUpdated') {
+        console.log('📨 Boletín actualizado en otra ventana, recargando...');
+        fetchBoletinHistory();
+        localStorage.removeItem('boletinUpdated'); // Limpiar el flag
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, [filterSubcontratos]);
+
+  // Efecto para recargar boletines cuando se activa la vista de historial
+  useEffect(() => {
+    if (viewHistory) {
+      console.log('📋 Vista de historial activada, recargando datos...');
+      fetchBoletinHistory();
+    }
+  }, [viewHistory]);
 
   // Nuevo: Efecto para detectar edición o generación desde la URL (abre en nuevo tab)
   useEffect(() => {
@@ -169,15 +199,17 @@ export const BoletinMedicion: React.FC = () => {
 
   const fetchBoletinHistory = async () => {
     try {
+      console.log('🔄 Recargando historial de boletines...');
       const response = await fetch('http://localhost:5000/api/payment-requests', {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (response.ok) {
         const data = await response.json();
         setSavedBoletines(data);
+        console.log('✅ Boletines recargados:', data.length);
       }
     } catch (error) {
-      console.error('Error al cargar boletines:', error);
+      console.error('❌ Error al cargar boletines:', error);
     }
   };
 
@@ -323,6 +355,7 @@ export const BoletinMedicion: React.FC = () => {
         Reference: '',
         Status: 0,
         VendorName: boletin.vendorName,
+        VendorFiscalID: boletin.vendorFiscalID,
         ProjectName: boletin.projectName,
         TotalAmount: 0
       });
@@ -331,6 +364,19 @@ export const BoletinMedicion: React.FC = () => {
     setItemsLoading(true);
     setViewHistory(false);
     try {
+      // Obtener los datos completos de la transacción desde AdmCloud para tener el FiscalID actualizado
+      const txResponse = await fetch(`http://localhost:5000/api/admcloud/transactions/${boletin.externalTxID}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      
+      if (txResponse.ok) {
+        const fullTx = await txResponse.json();
+        if (fullTx.VendorFiscalID) {
+          // Actualizar selectedTx con el FiscalID de AdmCloud
+          setSelectedTx((prev: any) => ({ ...prev, VendorFiscalID: fullTx.VendorFiscalID }));
+        }
+      }
+      
       const response = await fetch(`http://localhost:5000/api/admcloud/transactions/${boletin.externalTxID}/items`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
@@ -506,6 +552,7 @@ export const BoletinMedicion: React.FC = () => {
           externalTxID: selectedTx.ID,
           docID: selectedTx.DocID,
           vendorName: selectedTx.VendorName,
+          vendorFiscalID: selectedTx.VendorFiscalID,
           projectName: selectedTx.ProjectName,
           retentionPercent,
           advancePercent,
@@ -518,8 +565,15 @@ export const BoletinMedicion: React.FC = () => {
       if (response.ok) {
         alert(editingId ? "Boletín actualizado con éxito" : "Boletín generado con éxito");
         setHasUnsavedChanges(false);
+        
+        // Notificar a otras ventanas que se actualizó un boletín
+        localStorage.setItem('boletinUpdated', Date.now().toString());
+        
         if (isNewTab) {
-          window.close();
+          // Esperar un momento para que el mensaje se propague antes de cerrar
+          setTimeout(() => {
+            window.close();
+          }, 500);
         } else {
           setSelectedTx(null);
           setLinesToPay([]);
@@ -538,6 +592,16 @@ export const BoletinMedicion: React.FC = () => {
   };
 
   const generatePDF = (boletin: any) => {
+    console.log('📄 Generando PDF para boletín:', boletin.docNumber);
+    console.log('💰 Valores del boletín:', {
+      subTotal: boletin.subTotal,
+      taxAmount: boletin.taxAmount,
+      retentionAmount: boletin.retentionAmount,
+      advanceAmount: boletin.advanceAmount,
+      isrAmount: boletin.isrAmount,
+      netTotal: boletin.netTotal
+    });
+    
     const doc = new jsPDF();
     
     // Header
@@ -551,9 +615,16 @@ export const BoletinMedicion: React.FC = () => {
     doc.text(`Fecha: ${new Date(boletin.date).toLocaleDateString('es-ES')}`, 14, 38);
     doc.text(`OC Referencia: ${boletin.docID}`, 14, 44);
     doc.text(`Proveedor: ${boletin.vendorName}`, 14, 50);
-    doc.text(`Proyecto: ${boletin.projectName || 'General'}`, 14, 56);
     
-    let currentHeaderY = 62;
+    let currentHeaderY;
+    if (boletin.vendorFiscalID) {
+      doc.text(`RNC/Cédula: ${boletin.vendorFiscalID}`, 14, 56);
+      doc.text(`Proyecto: ${boletin.projectName || 'General'}`, 14, 62);
+      currentHeaderY = 68;
+    } else {
+      doc.text(`Proyecto: ${boletin.projectName || 'General'}`, 14, 56);
+      currentHeaderY = 62;
+    }
     
     if (boletin.receptionNumbers) {
       doc.text(`Recepciones: ${boletin.receptionNumbers}`, 14, currentHeaderY);
@@ -628,10 +699,25 @@ export const BoletinMedicion: React.FC = () => {
     doc.text(`Subtotal:`, labelX, finalY);
     doc.text(`$${formatCurrency(boletin.subTotal)}`, valueX, finalY, { align: 'right' });
     
-    doc.text(`ITBIS:`, labelX, finalY + 6);
+    doc.text(`+ ITBIS:`, labelX, finalY + 6);
     doc.text(`$${formatCurrency(boletin.taxAmount)}`, valueX, finalY + 6, { align: 'right' });
     
-    let currentY = finalY + 12;
+    // Total Bruto (antes de deducciones)
+    const totalBruto = boletin.subTotal + boletin.taxAmount;
+    doc.setLineWidth(0.5);
+    doc.line(labelX, finalY + 10, valueX, finalY + 10);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Total Bruto:`, labelX, finalY + 15);
+    doc.text(`$${formatCurrency(totalBruto)}`, valueX, finalY + 15, { align: 'right' });
+    doc.setFont("helvetica", "normal");
+    
+    // Sección de Deducciones
+    let currentY = finalY + 23;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Deducciones Aplicadas:`, labelX, currentY);
+    doc.setFont("helvetica", "normal");
+    currentY += 6;
 
     // Calcular y agrupar retenciones por línea por tipo y porcentaje
     const retentionsByType: { [key: string]: { percent: number; amount: number } } = {};
@@ -703,10 +789,32 @@ export const BoletinMedicion: React.FC = () => {
       currentY += 6;
     }
     
+    // Total Deducciones
+    const totalDeducciones = (boletin.retentionAmount || 0) + 
+                             (boletin.advanceAmount || 0) + 
+                             (boletin.isrAmount || 0) + 
+                             Object.values(retentionsByType).reduce((sum, ret) => sum + ret.amount, 0) +
+                             Object.values(itbisRetentionsByPercent).reduce((sum, amt) => sum + amt, 0);
+    
+    if (totalDeducciones > 0) {
+      doc.setLineWidth(0.3);
+      doc.line(labelX, currentY + 1, valueX, currentY + 1);
+      doc.setFont("helvetica", "bold");
+      currentY += 5;
+      doc.text(`Total Deducciones:`, labelX, currentY);
+      doc.text(`-$${formatCurrency(totalDeducciones)}`, valueX, currentY, { align: 'right' });
+      currentY += 2;
+      doc.setFont("helvetica", "normal");
+    }
+    
+    // Neto a Pagar
+    doc.setLineWidth(0.8);
+    doc.line(labelX, currentY + 2, valueX, currentY + 2);
+    doc.line(labelX, currentY + 3, valueX, currentY + 3);
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
-    doc.text(`NETO A PAGAR:`, labelX, currentY + 4);
-    doc.text(`$${formatCurrency(boletin.netTotal)}`, valueX, currentY + 4, { align: 'right' });
+    doc.text(`NETO A PAGAR:`, labelX, currentY + 9);
+    doc.text(`$${formatCurrency(boletin.netTotal)}`, valueX, currentY + 9, { align: 'right' });
 
     // Open in new tab instead of download
     const string = doc.output('bloburl');
@@ -754,18 +862,9 @@ export const BoletinMedicion: React.FC = () => {
 
       {viewHistory && !isNewTab ? (
         <div className="card history-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
-            <h2 style={{ margin: 0, fontSize: '1.8rem', color: '#1976d2' }}>Historial de Boletines Generados</h2>
-            <div style={{ display: 'flex', gap: '20px', alignItems: 'center', fontSize: '0.95rem' }}>
-              <span style={{ color: '#666', fontWeight: '500' }}>
-                Total: <strong style={{ color: '#1976d2', fontSize: '1.1rem' }}>{savedBoletines.length}</strong>
-              </span>
-              <span style={{ color: '#666', fontWeight: '500' }}>
-                Aprobados: <strong style={{ color: '#28a745', fontSize: '1.1rem' }}>{savedBoletines.filter(b => b.status === 'APROBADO').length}</strong>
-              </span>
-              <span style={{ color: '#666', fontWeight: '500' }}>
-                Rechazados: <strong style={{ color: '#dc3545', fontSize: '1.1rem' }}>{savedBoletines.filter(b => b.status === 'RECHAZADO').length}</strong>
-              </span>
+          <div style={{ marginBottom: '25px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0, fontSize: '1.8rem', color: '#1976d2' }}>Historial de Boletines Generados</h2>
               <button 
                 onClick={() => fetchBoletinHistory()} 
                 style={{ 
@@ -782,6 +881,66 @@ export const BoletinMedicion: React.FC = () => {
                 🔄 Recargar
               </button>
             </div>
+
+            {/* Filtros y Búsqueda */}
+            <div style={{ backgroundColor: '#f5f5f5', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '15px', alignItems: 'end' }}>
+                {/* Buscador */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600', color: '#555', fontSize: '0.9rem' }}>🔍 Buscar</label>
+                  <input
+                    type="text"
+                    placeholder="Proyecto, Proveedor, N° Boletín..."
+                    value={searchHistory}
+                    onChange={(e) => setSearchHistory(e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '0.9rem' }}
+                  />
+                </div>
+
+                {/* Filtro por Estado */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600', color: '#555', fontSize: '0.9rem' }}>📊 Estado</label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '0.9rem', cursor: 'pointer' }}
+                  >
+                    <option value="TODOS">Todos</option>
+                    <option value="PENDIENTE">Pendientes ({savedBoletines.filter(b => b.status === 'PENDIENTE').length})</option>
+                    <option value="APROBADO">Aprobados ({savedBoletines.filter(b => b.status === 'APROBADO').length})</option>
+                    <option value="RECHAZADO">Rechazados ({savedBoletines.filter(b => b.status === 'RECHAZADO').length})</option>
+                  </select>
+                </div>
+
+                {/* Agrupar por Proyecto */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600', color: '#555', fontSize: '0.9rem' }}>📁 Vista</label>
+                  <button
+                    onClick={() => setGroupByProject(!groupByProject)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #ddd',
+                      backgroundColor: groupByProject ? '#1976d2' : 'white',
+                      color: groupByProject ? 'white' : '#333',
+                      fontSize: '0.9rem',
+                      cursor: 'pointer',
+                      fontWeight: '500'
+                    }}
+                  >
+                    {groupByProject ? '📂 Por Proyecto' : '📄 Lista Completa'}
+                  </button>
+                </div>
+
+                {/* Estadísticas */}
+                <div style={{ display: 'flex', gap: '15px', padding: '8px 15px', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #ddd' }}>
+                  <span style={{ fontSize: '0.85rem', color: '#666' }}>
+                    Total: <strong style={{ color: '#1976d2' }}>{savedBoletines.filter(b => statusFilter === 'TODOS' || b.status === statusFilter).length}</strong>
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
           {savedBoletines.length === 0 ? (
             <div style={{ 
@@ -797,22 +956,133 @@ export const BoletinMedicion: React.FC = () => {
               <p style={{ margin: '10px 0 0 0', fontSize: '0.9rem' }}>Crea tu primer boletín seleccionando una Orden de Compra</p>
             </div>
           ) : (
-          <div className="table-responsive">
-            <table className="data-table history-table">
-              <thead>
-                <tr>
-                  <th style={{ minWidth: '160px', width: '10%' }}>N° BOLETÍN</th>
-                  <th style={{ minWidth: '110px', width: '8%' }}>FECHA</th>
-                  <th style={{ minWidth: '200px', width: '18%' }}>PROYECTO</th>
-                  <th style={{ minWidth: '140px', width: '10%' }}>REF (OC / REC)</th>
-                  <th style={{ minWidth: '180px', width: '15%' }}>PROVEEDOR</th>
-                  <th style={{ minWidth: '140px', width: '10%', textAlign: 'right' }}>NETO PAGADO</th>
-                  <th style={{ minWidth: '120px', width: '8%', textAlign: 'center' }}>ESTADO</th>
-                  <th style={{ minWidth: '280px', width: '21%', textAlign: 'center' }}>ACCIONES</th>
-                </tr>
-              </thead>
-              <tbody>
-                {savedBoletines.map(b => (
+          (() => {
+            // Filtrar boletines
+            let filteredBoletines = savedBoletines;
+            
+            // Filtro por estado
+            if (statusFilter !== 'TODOS') {
+              filteredBoletines = filteredBoletines.filter(b => b.status === statusFilter);
+            }
+            
+            // Filtro por búsqueda
+            if (searchHistory.trim()) {
+              const search = searchHistory.toLowerCase();
+              filteredBoletines = filteredBoletines.filter(b => 
+                b.docNumber.toLowerCase().includes(search) ||
+                (b.projectName || '').toLowerCase().includes(search) ||
+                b.vendorName.toLowerCase().includes(search) ||
+                b.docID.toLowerCase().includes(search)
+              );
+            }
+
+            if (groupByProject) {
+              // Agrupar por proyecto
+              const groupedByProject: { [key: string]: any[] } = {};
+              filteredBoletines.forEach(b => {
+                const projectName = b.projectName || 'Sin Proyecto';
+                if (!groupedByProject[projectName]) {
+                  groupedByProject[projectName] = [];
+                }
+                groupedByProject[projectName].push(b);
+              });
+
+              const toggleProject = (projectName: string) => {
+                const newCollapsed = new Set(collapsedProjects);
+                if (newCollapsed.has(projectName)) {
+                  newCollapsed.delete(projectName);
+                } else {
+                  newCollapsed.add(projectName);
+                }
+                setCollapsedProjects(newCollapsed);
+              };
+
+              return (
+                <div>
+                  {Object.keys(groupedByProject).sort().map(projectName => {
+                    const projectBoletines = groupedByProject[projectName];
+                    // Solo sumar boletines que NO estén RECHAZADOS
+                    const projectTotal = projectBoletines
+                      .filter(b => b.status !== 'RECHAZADO')
+                      .reduce((sum, b) => sum + b.netTotal, 0);
+                    // Total de rechazados
+                    const totalRechazado = projectBoletines
+                      .filter(b => b.status === 'RECHAZADO')
+                      .reduce((sum, b) => sum + b.netTotal, 0);
+                    const isCollapsed = collapsedProjects.has(projectName);
+                    
+                    // Contadores por estado
+                    const aprobados = projectBoletines.filter(b => b.status === 'APROBADO').length;
+                    const pendientes = projectBoletines.filter(b => b.status === 'PENDIENTE').length;
+                    const rechazados = projectBoletines.filter(b => b.status === 'RECHAZADO').length;
+
+                    return (
+                      <div key={projectName} style={{ marginBottom: '25px' }}>
+                        {/* Encabezado del Proyecto */}
+                        <div 
+                          onClick={() => toggleProject(projectName)}
+                          style={{
+                            backgroundColor: '#e3f2fd',
+                            padding: '15px 20px',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            border: '2px solid #1976d2',
+                            marginBottom: isCollapsed ? '0' : '10px',
+                            transition: 'all 0.3s ease'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                            <span style={{ fontSize: '1.2rem' }}>{isCollapsed ? '▶' : '▼'}</span>
+                            <div>
+                              <h3 style={{ margin: 0, color: '#1976d2', fontSize: '1.1rem' }}>{projectName}</h3>
+                              <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '5px', display: 'flex', gap: '12px' }}>
+                                <span>{projectBoletines.length} {projectBoletines.length === 1 ? 'boletín' : 'boletines'}</span>
+                                {aprobados > 0 && <span style={{ color: '#28a745' }}>✓ {aprobados} aprobado{aprobados > 1 ? 's' : ''}</span>}
+                                {pendientes > 0 && <span style={{ color: '#ff9800' }}>⏱ {pendientes} pendiente{pendientes > 1 ? 's' : ''}</span>}
+                                {rechazados > 0 && <span style={{ color: '#d32f2f' }}>✕ {rechazados} rechazado{rechazados > 1 ? 's' : ''}</span>}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#28a745' }}>
+                              ${formatCurrency(projectTotal)}
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: rechazados > 0 ? '#666' : '#666' }}>
+                              {rechazados > 0 ? 'Total (sin rechazados)' : 'Total Proyecto'}
+                            </div>
+                            {rechazados > 0 && totalRechazado > 0 && (
+                              <div style={{ 
+                                fontSize: '0.9rem', 
+                                color: '#d32f2f', 
+                                marginTop: '5px',
+                                fontWeight: '600'
+                              }}>
+                                -${formatCurrency(totalRechazado)} rechazados
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Tabla de Boletines del Proyecto */}
+                        {!isCollapsed && (
+                          <div className="table-responsive" style={{ marginLeft: '20px' }}>
+                            <table className="data-table history-table">
+                              <thead>
+                                <tr>
+                                  <th style={{ minWidth: '160px', width: '15%' }}>N° BOLETÍN</th>
+                                  <th style={{ minWidth: '110px', width: '10%' }}>FECHA</th>
+                                  <th style={{ minWidth: '140px', width: '12%' }}>REF (OC / REC)</th>
+                                  <th style={{ minWidth: '180px', width: '18%' }}>PROVEEDOR</th>
+                                  <th style={{ minWidth: '140px', width: '12%', textAlign: 'right' }}>NETO PAGADO</th>
+                                  <th style={{ minWidth: '120px', width: '10%', textAlign: 'center' }}>ESTADO</th>
+                                  <th style={{ minWidth: '280px', width: '23%', textAlign: 'center' }}>ACCIONES</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {projectBoletines.map(b => (
                   <tr key={b.id}>
                     <td><strong style={{ fontSize: '1rem', color: '#1976d2' }}>{b.docNumber}</strong></td>
                     <td style={{ whiteSpace: 'nowrap', fontSize: '0.95rem' }}>{new Date(b.date).toLocaleDateString('es-ES')}</td>
@@ -831,6 +1101,11 @@ export const BoletinMedicion: React.FC = () => {
                       <div className="vendor-cell-large" title={b.vendorName}>
                         {b.vendorName}
                       </div>
+                      {b.vendorFiscalID && (
+                        <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '3px' }}>
+                          RNC: {b.vendorFiscalID}
+                        </div>
+                      )}
                     </td>
                     <td style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '1rem', color: '#28a745' }}>${formatCurrency(b.netTotal)}</td>
                     <td style={{ textAlign: 'center' }}>
@@ -882,16 +1157,85 @@ export const BoletinMedicion: React.FC = () => {
             </table>
           </div>
           )}
-          
-          {/* Botón flotante para cerrar en nueva pestaña */}
-          {isNewTab && (
-            <button 
-              className="floating-close-btn"
-              onClick={handleClose}
-              title="Cerrar ventana"
-            >
-              ✕
-            </button>
+        </div>
+      );
+    })}
+    
+    {/* Botón flotante para cerrar en nueva pestaña */}
+    {isNewTab && (
+      <button 
+        className="floating-close-btn"
+        onClick={handleClose}
+        title="Cerrar ventana"
+      >
+        ✕
+      </button>
+    )}
+  </div>
+);
+            } else {
+              // Vista sin agrupar: tabla completa
+              return (
+                <div className="table-responsive">
+                  <table className="data-table history-table">
+                    <thead>
+                      <tr>
+                        <th style={{ minWidth: '160px', width: '15%' }}>N° BOLETÍN</th>
+                        <th style={{ minWidth: '110px', width: '10%' }}>FECHA</th>
+                        <th style={{ minWidth: '140px', width: '12%' }}>REF (OC / REC)</th>
+                        <th style={{ minWidth: '200px', width: '16%' }}>PROYECTO</th>
+                        <th style={{ minWidth: '180px', width: '18%' }}>PROVEEDOR</th>
+                        <th style={{ minWidth: '140px', width: '12%', textAlign: 'right' }}>NETO PAGADO</th>
+                        <th style={{ minWidth: '120px', width: '10%', textAlign: 'center' }}>ESTADO</th>
+                        <th style={{ minWidth: '280px', width: '17%', textAlign: 'center' }}>ACCIONES</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredBoletines.map(b => (
+                        <tr key={b.id}>
+                          <td style={{ fontWeight: '600', color: '#1976d2' }}>{b.docNumber}</td>
+                          <td>{new Date(b.date).toLocaleDateString('es-DO')}</td>
+                          <td><div style={{ fontSize: '0.85rem', color: '#666' }}>{b.docID}</div></td>
+                          <td className="project-cell-large">{b.projectName || 'Sin Proyecto'}</td>
+                          <td className="vendor-cell-large">{b.vendorName}</td>
+                          <td style={{ textAlign: 'right', fontWeight: '700', color: '#28a745', fontSize: '1rem' }}>
+                            ${formatCurrency(b.netTotal)}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className={`status-badge status-${b.status.toLowerCase()}`}>{b.status}</span>
+                          </td>
+                          <td>
+                            <div className="action-buttons-container-large">
+                              <button className="btn-action-large btn-pdf" onClick={() => generatePDF(b)}>
+                                <span>📄</span> PDF
+                              </button>
+                              {b.status === "PENDIENTE" && (
+                                <>
+                                  <button className="btn-action-large btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
+                                    <span>✏️</span> Editar
+                                  </button>
+                                  {(user?.role === 'admin' || user?.accessContabilidad) && (
+                                    <div className="approval-group-large">
+                                      <button className="btn-action-large btn-approve" onClick={() => handleStatusChange(b.id, 'APROBADO')}>
+                                        <span>✓</span> Aprobar
+                                      </button>
+                                      <button className="btn-action-large btn-reject" onClick={() => handleStatusChange(b.id, 'RECHAZADO')}>
+                                        <span>✕</span> Rechazar
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            }
+          })()
           )}
         </div>
       ) : !selectedTx ? (
@@ -1037,7 +1381,14 @@ export const BoletinMedicion: React.FC = () => {
                       {txs.map(tx => (
                         <tr key={tx.ID}>
                           <td style={{ fontWeight: '600', color: '#1976d2' }}>{tx.DocID}</td>
-                          <td>{tx.VendorName}</td>
+                          <td>
+                            <div>{tx.VendorName}</div>
+                            {tx.VendorFiscalID && (
+                              <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '2px' }}>
+                                RNC: {tx.VendorFiscalID}
+                              </div>
+                            )}
+                          </td>
                           <td style={{ whiteSpace: 'nowrap' }}>{new Date(tx.DocDate).toLocaleDateString('es-ES')}</td>
                           <td style={{ textAlign: 'right', fontWeight: '600', color: '#28a745' }}>${formatCurrency(tx.TotalAmount)}</td>
                           <td style={{ textAlign: 'center' }}>
@@ -1111,6 +1462,9 @@ export const BoletinMedicion: React.FC = () => {
               </button>
             </div>
             <p><strong>Proveedor:</strong> {selectedTx.VendorName}</p>
+            {selectedTx.VendorFiscalID && (
+              <p><strong>RNC/Cédula:</strong> {selectedTx.VendorFiscalID}</p>
+            )}
             <p><strong>Proyecto:</strong> {selectedTx.ProjectName || 'General'}</p>
             {(() => {
               const selectedReceptionSet = new Set<string>();

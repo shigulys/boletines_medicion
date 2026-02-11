@@ -175,6 +175,20 @@ export const RetentionManagement: React.FC = () => {
           border: '1px solid #ddd'
         }}>
           <h3>{editingId ? 'Editar Retención' : 'Nueva Retención'}</h3>
+          
+          <div style={{ 
+            padding: '12px', 
+            backgroundColor: '#e3f2fd', 
+            color: '#0d47a1', 
+            borderRadius: '4px', 
+            marginBottom: '15px',
+            border: '1px solid #90caf9',
+            fontSize: '0.9rem'
+          }}>
+            <strong>ℹ️ Nota importante:</strong> El campo <strong>"Nombre"</strong> es el que aparecerá en los boletines y reportes PDF. 
+            La <strong>"Descripción"</strong> es solo para uso interno y no se mostrará en documentos.
+          </div>
+          
           {formError && (
             <div style={{ 
               padding: '10px', 
@@ -208,13 +222,13 @@ export const RetentionManagement: React.FC = () => {
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                  Nombre *
+                  Nombre (aparece en reportes) *
                 </label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="ej: Retención en la Fuente"
+                  placeholder="ej: Retención 10% o Fondo de Garantía"
                   style={{ 
                     width: '100%', 
                     padding: '8px', 
@@ -223,6 +237,9 @@ export const RetentionManagement: React.FC = () => {
                   }}
                   required
                 />
+                <small style={{ color: '#666', fontSize: '0.85rem' }}>
+                  Este nombre aparecerá en los boletines y reportes PDF
+                </small>
               </div>
             </div>
 
@@ -249,13 +266,13 @@ export const RetentionManagement: React.FC = () => {
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                  Descripción
+                  Descripción (uso interno - opcional)
                 </label>
                 <input
                   type="text"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Descripción opcional"
+                  placeholder="Notas adicionales para uso interno"
                   style={{ 
                     width: '100%', 
                     padding: '8px', 
@@ -263,6 +280,9 @@ export const RetentionManagement: React.FC = () => {
                     border: '1px solid #ddd' 
                   }}
                 />
+                <small style={{ color: '#666', fontSize: '0.85rem' }}>
+                  Solo para referencia interna, no aparece en reportes
+                </small>
               </div>
             </div>
 
@@ -323,9 +343,19 @@ export const RetentionManagement: React.FC = () => {
           <thead>
             <tr style={{ backgroundColor: '#f5f5f5' }}>
               <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Código</th>
-              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Nombre</th>
+              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>
+                Nombre
+                <div style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#666', marginTop: '2px' }}>
+                  (Aparece en reportes)
+                </div>
+              </th>
               <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #ddd' }}>Porcentaje</th>
-              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Descripción</th>
+              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>
+                Descripción
+                <div style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#666', marginTop: '2px' }}>
+                  (Uso interno)
+                </div>
+              </th>
               <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Estado</th>
               <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Acciones</th>
             </tr>

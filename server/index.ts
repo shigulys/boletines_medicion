@@ -480,6 +480,7 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
             t.[TotalAmount],
             t.[DepartmentID],
             r.[FullName] as VendorName,
+            r.[FiscalID] as VendorFiscalID,
             p.[Name] as ProjectName
         FROM [dbo].[SA_Transactions] t
         LEFT JOIN [dbo].[SA_Relationships] r ON t.[RelationshipID] = r.[ID]
@@ -506,6 +507,45 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
     res.json(result.recordset);
   } catch (error) {
     console.error("Error fetching AdmCloud transactions:", error);
+    res.status(500).json({ message: "Error al consultar AdmCloud" });
+  }
+});
+
+// Get single Transaction by ID
+app.get("/api/admcloud/transactions/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await connectAdmCloud();
+    
+    const query = `
+        SELECT TOP 1
+            t.[ID],
+            t.[DocID],
+            t.[DocType],
+            t.[DocDate],
+            t.[Reference],
+            t.[Status],
+            t.[TaxAmount],
+            t.[TotalAmount],
+            t.[DepartmentID],
+            r.[FullName] as VendorName,
+            r.[FiscalID] as VendorFiscalID,
+            p.[Name] as ProjectName
+        FROM [dbo].[SA_Transactions] t
+        LEFT JOIN [dbo].[SA_Relationships] r ON t.[RelationshipID] = r.[ID]
+        LEFT JOIN [dbo].[PA_Projects] p ON t.[ProjectID] = p.[ID]
+        WHERE t.[ID] = '${id}'
+    `;
+    
+    const result = await pool.request().query(query);
+    
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ message: "Transacción no encontrada" });
+    }
+    
+    res.json(result.recordset[0]);
+  } catch (error) {
+    console.error("Error fetching AdmCloud transaction:", error);
     res.status(500).json({ message: "Error al consultar AdmCloud" });
   }
 });
@@ -629,7 +669,7 @@ app.get("/api/budget-items/:id/measurements", authenticateToken, async (req, res
 
 app.post("/api/payment-requests", authenticateToken, async (req, res) => {
   const { 
-    externalTxID, docID, vendorName, projectName, 
+    externalTxID, docID, vendorName, vendorFiscalID, projectName, 
     lines, retentionPercent, advancePercent, isrPercent,
     receptionNumbers 
   } = req.body;
@@ -681,6 +721,7 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
         externalTxID,
         docID,
         vendorName,
+        vendorFiscalID,
         projectName,
         receptionNumbers,
         subTotal,
@@ -718,7 +759,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { 
     lines, retentionPercent, advancePercent, isrPercent,
-    receptionNumbers 
+    receptionNumbers, vendorFiscalID 
   } = req.body;
 
   try {
@@ -791,6 +832,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
           isrAmount,
           netTotal,
           receptionNumbers,
+          vendorFiscalID,
           lines: { create: formattedLines }
         },
         include: { lines: true }

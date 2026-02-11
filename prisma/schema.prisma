@@ -81,6 +81,7 @@ model PaymentRequest {
   externalTxID      String               // AdmCloud TransID (OC)
   docID             String               // AdmCloud DocID (Ej: OC-001)
   vendorName        String
+  vendorFiscalID    String?              // RNC o Cédula del proveedor
   projectName       String?
   receptionNumbers  String?              // Ej: ICI-RIN00001, ICI-RIN00002
   date              DateTime             @default(now())
