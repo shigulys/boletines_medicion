@@ -17,6 +17,9 @@ interface Transaction {
   MeasurementStartDate?: string;
   MeasurementEndDate?: string;
   TotalAmount: number;
+  TaxAmount?: number;
+  Currency?: string;
+  ExchangeRate?: number;
 }
 
 interface TransactionItem {
@@ -30,6 +33,8 @@ interface TransactionItem {
   ReceptionNumbers?: string;
   Price: number;
   TaxAmount: number;
+  TaxPercent?: number;
+  TotalSalesAmount?: number;
 }
 
 interface BoletinLine {
@@ -672,81 +677,425 @@ export const BoletinMedicion: React.FC = () => {
     }
   };
 
-  const exportToExcel = () => {
-    // Preparar datos para Excel
-    const data: any[] = [];
+  const exportToExcel = async () => {
+    // Mostrar estado de carga
+    setLoading(true);
     
-    // Por cada proyecto, agregar sus órdenes
-    Object.entries(groupedTransactions).forEach(([projectName, txs], index) => {
-      // Filas de órdenes del proyecto
-      txs.forEach((tx, txIndex) => {
-        data.push({
-          'Proyecto': txIndex === 0 ? projectName : '', // Solo mostrar nombre del proyecto en la primera fila
-          'Doc ID': tx.DocID,
-          'Proveedor': tx.VendorName?.toUpperCase() || '',
-          'RNC/Cédula': tx.VendorFiscalID || '',
-          'Fecha OC': new Date(tx.DocDate).toLocaleDateString('es-ES'),
-          'Total OC': tx.TotalAmount // Número directo, no formateado
+    try {
+      // Preparar datos para la primera hoja (resumen de órdenes)
+      const data: any[] = [];
+      
+      // Por cada proyecto, agregar sus órdenes
+      Object.entries(groupedTransactions).forEach(([projectName, txs], index) => {
+        // Filas de órdenes del proyecto
+        txs.forEach((tx, txIndex) => {
+          // Determinar moneda - verificar múltiples formatos posibles
+          let moneda = 'DOP'; // Por defecto
+          const currencyValue = String(tx.Currency || '').trim().toUpperCase();
+          
+          // USD puede venir como: '2', 'USD', o GUID específico
+          if (currencyValue === '2' || currencyValue === 'USD' || 
+              currencyValue === 'B99EF67E-9001-4BAA-ADCE-08DDAA50AC6E') {
+            moneda = 'USD';
+          }
+          // DOP puede venir como: '1', 'DOP', o GUID específico  
+          else if (currencyValue === '1' || currencyValue === 'DOP' || 
+                   currencyValue === 'F5825D92-D608-4B7B-ADCD-08DDAA50AC6E') {
+            moneda = 'DOP';
+          }
+          
+          data.push({
+            'Proyecto': txIndex === 0 ? projectName : '', // Solo mostrar nombre del proyecto en la primera fila
+            'Doc ID': tx.DocID,
+            'Proveedor': tx.VendorName?.toUpperCase() || '',
+            'RNC/Cédula': tx.VendorFiscalID || '',
+            'Fecha OC': new Date(tx.DocDate).toLocaleDateString('es-ES'),
+            'Moneda': moneda,
+            'Tasa Cambio': tx.ExchangeRate || '',
+            'Total OC': tx.TotalAmount // Número directo, no formateado
+          });
         });
+        
+        // Fila vacía entre proyectos (excepto después del último)
+        if (index < Object.keys(groupedTransactions).length - 1) {
+          data.push({
+            'Proyecto': '',
+            'Doc ID': '',
+            'Proveedor': '',
+            'RNC/Cédula': '',
+            'Fecha OC': '',
+            'Moneda': '',
+            'Total OC': null
+          });
+        }
       });
       
-      // Fila vacía entre proyectos (excepto después del último)
-      if (index < Object.keys(groupedTransactions).length - 1) {
+      // Fila vacía antes del total
+      data.push({
+        'Proyecto': '',
+        'Doc ID': '',
+        'Proveedor': '',
+        'RNC/Cédula': '',
+        'Fecha OC': '',
+        'Moneda': '',
+        'Tasa Cambio': '',
+        'Total OC': null
+      });
+      
+      // Calcular totales por moneda
+      const totalesPorMoneda = filteredTxs.reduce((acc: {DOP: number, USD: number, count: number}, tx) => {
+        const currencyValue = String(tx.Currency || '').trim().toUpperCase();
+        let moneda = 'DOP';
+        
+        if (currencyValue === '2' || currencyValue === 'USD' || 
+            currencyValue === 'B99EF67E-9001-4BAA-ADCE-08DDAA50AC6E') {
+          moneda = 'USD';
+        }
+        
+        acc[moneda as 'DOP' | 'USD'] += tx.TotalAmount;
+        acc.count++;
+        return acc;
+      }, {DOP: 0, USD: 0, count: 0});
+      
+      // Total en DOP
+      if (totalesPorMoneda.DOP > 0) {
         data.push({
-          'Proyecto': '',
+          'Proyecto': 'TOTAL DOP',
           'Doc ID': '',
           'Proveedor': '',
           'RNC/Cédula': '',
           'Fecha OC': '',
-          'Total OC': null
+          'Moneda': 'DOP',
+          'Tasa Cambio': '',
+          'Total OC': totalesPorMoneda.DOP
         });
       }
-    });
-    
-    // Fila vacía antes del total
-    data.push({
-      'Proyecto': '',
-      'Doc ID': '',
-      'Proveedor': '',
-      'RNC/Cédula': '',
-      'Fecha OC': '',
-      'Total OC': null
-    });
-    
-    // Total general
-    const totalGeneral = filteredTxs.reduce((sum, tx) => sum + tx.TotalAmount, 0);
-    data.push({
-      'Proyecto': 'TOTAL GENERAL',
-      'Doc ID': '',
-      'Proveedor': '',
-      'RNC/Cédula': '',
-      'Fecha OC': `${filteredTxs.length} ${filteredTxs.length === 1 ? 'orden' : 'órdenes'}`,
-      'Total OC': totalGeneral // Número directo
-    });
-    
-    // Crear hoja de cálculo
-    const ws = XLSX.utils.json_to_sheet(data);
-    
-    // Establecer anchos de columnas
-    ws['!cols'] = [
-      { wch: 40 }, // Proyecto
-      { wch: 15 }, // Doc ID
-      { wch: 30 }, // Proveedor
-      { wch: 15 }, // RNC/Cédula
-      { wch: 12 }, // Fecha OC
-      { wch: 18 }  // Total OC
-    ];
-    
-    // Crear libro y agregar hoja
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Órdenes por Proyecto');
-    
-    // Generar nombre de archivo con fecha
-    const fecha = new Date().toISOString().split('T')[0];
-    const fileName = `OC_por_Proyecto_${fecha}.xlsx`;
-    
-    // Descargar archivo
-    XLSX.writeFile(wb, fileName);
+      
+      // Total en USD
+      if (totalesPorMoneda.USD > 0) {
+        data.push({
+          'Proyecto': 'TOTAL USD',
+          'Doc ID': '',
+          'Proveedor': '',
+          'RNC/Cédula': '',
+          'Fecha OC': '',
+          'Moneda': 'USD',
+          'Tasa Cambio': '',
+          'Total OC': totalesPorMoneda.USD
+        });
+      }
+      
+      // Fila en blanco
+      data.push({
+        'Proyecto': '',
+        'Doc ID': '',
+        'Proveedor': '',
+        'RNC/Cédula': '',
+        'Fecha OC': '',
+        'Moneda': '',
+        'Tasa Cambio': '',
+        'Total OC': null
+      });
+      
+      // Total general (informativo)
+      const totalGeneral = filteredTxs.reduce((sum, tx) => sum + tx.TotalAmount, 0);
+      data.push({
+        'Proyecto': 'TOTAL GENERAL',
+        'Doc ID': '',
+        'Proveedor': '',
+        'RNC/Cédula': '',
+        'Fecha OC': `${totalesPorMoneda.count} ${totalesPorMoneda.count === 1 ? 'orden' : 'órdenes'}`,
+        'Moneda': '',
+        'Tasa Cambio': '',
+        'Total OC': totalGeneral // Número directo
+      });
+      
+      // Crear hoja de cálculo para resumen
+      const ws = XLSX.utils.json_to_sheet(data);
+      
+      // Establecer anchos de columnas para resumen
+      ws['!cols'] = [
+        { wch: 40 }, // Proyecto
+        { wch: 15 }, // Doc ID
+        { wch: 30 }, // Proveedor
+        { wch: 15 }, // RNC/Cédula
+        { wch: 12 }, // Fecha OC
+        { wch: 8 },  // Moneda
+        { wch: 12 }, // Tasa Cambio
+        { wch: 18 }  // Total OC
+      ];
+      
+      // Obtener los items de todas las órdenes en paralelo
+      console.log('📥 Obteniendo items de las órdenes...');
+      const itemsPromises = filteredTxs.map(async (tx) => {
+        try {
+          const response = await fetch(`http://localhost:5000/api/admcloud/transactions/${tx.ID}/items`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          });
+          if (response.ok) {
+            const items = await response.json();
+            return items.map((item: TransactionItem) => ({
+              transaction: tx,
+              item: item
+            }));
+          }
+          return [];
+        } catch (error) {
+          console.error(`Error al obtener items de ${tx.DocID}:`, error);
+          return [];
+        }
+      });
+      
+      const allItemsWithTx = await Promise.all(itemsPromises);
+      const flattenedItems = allItemsWithTx.flat();
+      
+      console.log(`✅ Se obtuvieron ${flattenedItems.length} items de ${filteredTxs.length} órdenes`);
+      
+      // Log para verificar valores de Currency
+      const currencyValues = new Set(filteredTxs.map(tx => tx.Currency));
+      console.log('💰 Valores únicos de Currency encontrados:', Array.from(currencyValues));
+      filteredTxs.forEach(tx => {
+        console.log(`📋 ${tx.DocID}: Currency = "${tx.Currency}" (type: ${typeof tx.Currency}), TotalAmount = ${tx.TotalAmount}, TaxAmount = ${tx.TaxAmount}`);
+      });
+      
+      // Agrupar items por transacción para calcular totales
+      const itemsByTransaction = new Map<string, Array<{transaction: Transaction, item: TransactionItem}>>();
+      flattenedItems.forEach(({ transaction, item }) => {
+        const key = transaction.ID;
+        if (!itemsByTransaction.has(key)) {
+          itemsByTransaction.set(key, []);
+        }
+        itemsByTransaction.get(key)!.push({ transaction, item });
+      });
+      
+      // Preparar datos para la segunda hoja (detalle de items)
+      const itemsData: any[] = [];
+      
+      // Procesar por transacción para agregar subtotales
+      itemsByTransaction.forEach((items, transactionId) => {
+        let totalOrdenadoOC = 0;
+        let totalRecibidoOC = 0;
+        
+        // Agregar items de esta transacción
+        items.forEach(({ transaction, item }) => {
+          // Determinar la tasa de impuesto
+          let tasaImpuesto = 0;
+          let metodoCalculo = '';
+          let itemExento = false;
+          
+          // Verificar si el item está explícitamente exento (TaxAmount = 0 Y TaxPercent = 0 o null)
+          if ((item.TaxAmount === 0 || item.TaxAmount === null) && 
+              (item.TaxPercent === 0 || item.TaxPercent === null || item.TaxPercent === undefined)) {
+            itemExento = true;
+            metodoCalculo = 'Item exento de impuestos';
+          }
+          
+          // Solo calcular impuesto si el item NO está exento
+          if (!itemExento) {
+            // Método 1: Usar TaxPercent si existe y es razonable (entre 0% y 30%)
+            if (item.TaxPercent !== undefined && item.TaxPercent !== null && item.TaxPercent > 0 && item.TaxPercent <= 30) {
+              tasaImpuesto = item.TaxPercent / 100;
+              metodoCalculo = `TaxPercent directo: ${item.TaxPercent}%`;
+            } 
+            // Método 2: Calcular de TaxAmount / subtotal ordenado
+            else if (item.TaxAmount > 0 && item.OrderedQuantity > 0) {
+              const subtotalOrdenado = item.Price * item.OrderedQuantity;
+              if (subtotalOrdenado > 0) {
+                const calculado = item.TaxAmount / subtotalOrdenado;
+                // Validar que sea razonable (máximo 30%)
+                if (calculado <= 0.30) {
+                  tasaImpuesto = calculado;
+                  metodoCalculo = `TaxAmount/Subtotal: ${item.TaxAmount}/${subtotalOrdenado} = ${(calculado*100).toFixed(2)}%`;
+                }
+              }
+            }
+            
+            // Método 3: Calcular de la diferencia entre TotalSalesAmount y subtotal
+            else if (item.TotalSalesAmount && item.OrderedQuantity > 0) {
+              const subtotalOrdenado = item.Price * item.OrderedQuantity;
+              if (subtotalOrdenado > 0 && item.TotalSalesAmount > subtotalOrdenado) {
+                const calculado = (item.TotalSalesAmount - subtotalOrdenado) / subtotalOrdenado;
+                if (calculado <= 0.30) {
+                  tasaImpuesto = calculado;
+                  metodoCalculo = `TotalSalesAmount: (${item.TotalSalesAmount}-${subtotalOrdenado})/${subtotalOrdenado} = ${(calculado*100).toFixed(2)}%`;
+                }
+              }
+            }
+            
+            // Método 4: Inferir del total de la orden SOLO si no tenemos información específica del item
+            // Y el item no está marcado explícitamente como sin impuesto
+            else if (transaction.TotalAmount > 0 && transaction.TaxAmount && transaction.TaxAmount > 0) {
+              const subtotalOrden = transaction.TotalAmount - transaction.TaxAmount;
+              if (subtotalOrden > 0) {
+                const calculado = transaction.TaxAmount / subtotalOrden;
+                if (calculado <= 0.30) {
+                  tasaImpuesto = calculado;
+                  metodoCalculo = `Tasa de orden (inferido): ${transaction.TaxAmount}/${subtotalOrden} = ${(calculado*100).toFixed(2)}%`;
+                }
+              }
+            }
+          }
+          
+          // Log detallado para órdenes específicas o items con inconsistencias
+          if (transaction.DocID === 'ICI-ORC00000288' || transaction.DocID === 'ICI-ORC00000255' || 
+              tasaImpuesto > 0.20 || itemExento) {
+            console.log(`🔍 ${transaction.DocID} - ${item.ItemID} (${item.Name.substring(0, 40)}):`, {
+              Price: item.Price,
+              OrderedQty: item.OrderedQuantity,
+              SubtotalBruto: item.Price * item.OrderedQuantity,
+              TaxPercent: item.TaxPercent,
+              TaxAmount: item.TaxAmount,
+              TotalSalesAmount: item.TotalSalesAmount,
+              exento: itemExento,
+              tasaCalculada: (tasaImpuesto * 100).toFixed(2) + '%',
+              metodo: metodoCalculo
+            });
+          }
+          
+          // Calcular descuento si TotalSalesAmount es diferente de Price * Qty + Tax
+          const subtotalBrutoOrdenado = item.Price * item.OrderedQuantity;
+          const impuestoEsperado = subtotalBrutoOrdenado * tasaImpuesto;
+          const totalEsperado = subtotalBrutoOrdenado + impuestoEsperado;
+          
+          // Inferir descuento desde TotalSalesAmount si está disponible y difiere del total esperado
+          let descuentoOrdenado = 0;
+          let descuentoPercent = 0;
+          
+          if (item.TotalSalesAmount && Math.abs(item.TotalSalesAmount - totalEsperado) > 0.01) {
+            // Hay una diferencia, puede ser un descuento
+            // TotalSalesAmount = (Subtotal - Descuento) + Impuesto
+            // Resolviendo: Descuento = Subtotal + Impuesto - TotalSalesAmount
+            const diferenciaTotal = totalEsperado - item.TotalSalesAmount;
+            
+            // Si la diferencia es positiva, es un descuento
+            if (diferenciaTotal > 0) {
+              // El descuento afecta tanto el subtotal como el impuesto
+              // (Subtotal - Desc) * (1 + Tax%) = TotalSalesAmount
+              // Subtotal - Desc = TotalSalesAmount / (1 + Tax%)
+              const subtotalConDescuento = item.TotalSalesAmount / (1 + tasaImpuesto);
+              descuentoOrdenado = subtotalBrutoOrdenado - subtotalConDescuento;
+              descuentoPercent = subtotalBrutoOrdenado > 0 ? (descuentoOrdenado / subtotalBrutoOrdenado) * 100 : 0;
+            }
+          }
+          
+          const subtotalOrdenado = subtotalBrutoOrdenado - descuentoOrdenado;
+          const impuestoOrdenado = subtotalOrdenado * tasaImpuesto;
+          const totalOrdenado = subtotalOrdenado + impuestoOrdenado;
+          
+          // Calcular valores basados en la cantidad recibida
+          const subtotalBrutoRecibido = item.Price * item.ReceivedQuantity;
+          const descuentoRecibido = item.OrderedQuantity > 0 
+            ? (descuentoOrdenado / item.OrderedQuantity) * item.ReceivedQuantity 
+            : 0;
+          const subtotalRecibido = subtotalBrutoRecibido - descuentoRecibido;
+          const impuestoRecibido = subtotalRecibido * tasaImpuesto;
+          const totalRecibido = subtotalRecibido + impuestoRecibido;
+          
+          // Determinar moneda - verificar múltiples formatos posibles
+          let moneda = 'DOP'; // Por defecto
+          const currencyValue = String(transaction.Currency || '').trim().toUpperCase();
+          
+          // USD puede venir como: '2', 'USD', o GUID específico
+          if (currencyValue === '2' || currencyValue === 'USD' || 
+              currencyValue === 'B99EF67E-9001-4BAA-ADCE-08DDAA50AC6E') {
+            moneda = 'USD';
+          }
+          // DOP puede venir como: '1', 'DOP', o GUID específico  
+          else if (currencyValue === '1' || currencyValue === 'DOP' || 
+                   currencyValue === 'F5825D92-D608-4B7B-ADCD-08DDAA50AC6E') {
+            moneda = 'DOP';
+          }
+          
+          // Acumular totales de la OC
+          totalOrdenadoOC += totalOrdenado;
+          totalRecibidoOC += totalRecibido;
+          
+          // Agregar item al detalle
+          itemsData.push({
+            'Proyecto': transaction.JobNumber || '',
+            'Doc ID': transaction.DocID,
+            'Proveedor': transaction.VendorName,
+            'RNC/Cédula': transaction.VendorFiscalID || '',
+            'Fecha OC': transaction.Date ? new Date(transaction.Date).toLocaleDateString() : '',
+            'Moneda': moneda,
+            'Item ID': item.ItemID,
+            'Descripción': item.Name,
+            'Cant. Ordenada': item.OrderedQuantity,
+            'Cant. Recibida': item.ReceivedQuantity,
+            'Cant. Pagada': item.PaidQuantity,
+            'Cant. Pendiente': item.ReceivedQuantity - item.PaidQuantity,
+            'Precio Unitario': item.Price,
+            '% Descuento': descuentoPercent,
+            'Descuento Ordenado': descuentoOrdenado,
+            'Descuento Recibido': descuentoRecibido,
+            'TaxAmount AdmCloud': item.TaxAmount || 0,
+            'TaxPercent AdmCloud': item.TaxPercent || 0,
+            '% Impuesto Aplicado': tasaImpuesto * 100,
+            'Subtotal Ordenado': subtotalOrdenado,
+            'Impuesto Ordenado': impuestoOrdenado,
+            'Total Ordenado': totalOrdenado,
+            'Subtotal Recibido': subtotalRecibido,
+            'Impuesto Recibido': impuestoRecibido,
+            'Total Recibido': totalRecibido,
+            'TotalSalesAmount AdmCloud': item.TotalSalesAmount || 0,
+            'N° Recepciones': item.ReceptionNumbers || ''
+          });
+        });
+      });
+      
+      // Crear hoja de cálculo para items
+      const wsItems = XLSX.utils.json_to_sheet(itemsData);
+      
+      // Establecer anchos de columnas para items
+      wsItems['!cols'] = [
+        { wch: 35 }, // Proyecto
+        { wch: 15 }, // Doc ID
+        { wch: 30 }, // Proveedor
+        { wch: 15 }, // RNC/Cédula
+        { wch: 12 }, // Fecha OC
+        { wch: 8 },  // Moneda
+        { wch: 15 }, // Item ID
+        { wch: 40 }, // Descripción
+        { wch: 12 }, // Cant. Ordenada
+        { wch: 12 }, // Cant. Recibida
+        { wch: 12 }, // Cant. Pagada
+        { wch: 12 }, // Cant. Pendiente
+        { wch: 15 }, // Precio Unitario
+        { wch: 10 }, // % Descuento
+        { wch: 15 }, // Descuento Ordenado
+        { wch: 15 }, // Descuento Recibido
+        { wch: 16 }, // TaxAmount AdmCloud
+        { wch: 16 }, // TaxPercent AdmCloud
+        { wch: 12 }, // % Impuesto Aplicado
+        { wch: 16 }, // Subtotal Ordenado
+        { wch: 16 }, // Impuesto Ordenado
+        { wch: 16 }, // Total Ordenado
+        { wch: 16 }, // Subtotal Recibido
+        { wch: 16 }, // Impuesto Recibido
+        { wch: 18 }, // TotalSalesAmount AdmCloud
+        { wch: 16 }, // Total Recibido
+        { wch: 20 }  // N° Recepciones
+      ];
+      
+      // Crear libro y agregar ambas hojas
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Órdenes por Proyecto');
+      XLSX.utils.book_append_sheet(wb, wsItems, 'Detalle de Items');
+      
+      // Generar nombre de archivo con fecha
+      const fecha = new Date().toISOString().split('T')[0];
+      const fileName = `OC_por_Proyecto_${fecha}.xlsx`;
+      
+      // Descargar archivo
+      XLSX.writeFile(wb, fileName);
+      
+      console.log('✅ Archivo Excel generado exitosamente con 2 hojas');
+    } catch (error) {
+      console.error('❌ Error al exportar a Excel:', error);
+      setError('Error al exportar a Excel');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const generatePDF = (boletin: any) => {

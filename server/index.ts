@@ -479,6 +479,8 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
             t.[TaxAmount],
             t.[TotalAmount],
             t.[DepartmentID],
+            t.[CurrencyID] as Currency,
+            t.[ExchangeRate],
             t.[CUSTOM_Fechadesde] as MeasurementStartDate,
             t.[CUSTOM_Fechahasta] as MeasurementEndDate,
             r.[FullName] as VendorName,
@@ -502,6 +504,15 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
     
     const result = await pool.request().query(query);
     console.log(`✅ Resultados devueltos: ${result.recordset.length} órdenes`);
+    
+    // Log de monedas para depuración
+    const ordenesPorMoneda = result.recordset.reduce((acc: any, r: any) => {
+      const curr = r.Currency || 'NULL';
+      acc[curr] = (acc[curr] || 0) + 1;
+      return acc;
+    }, {});
+    console.log('💰 Distribución de monedas:', ordenesPorMoneda);
+    
     if (departmentFilterParam === 'subcontratos') {
       console.log(`📋 DocIDs devueltos: ${result.recordset.map((r: any) => r.DocID).join(', ')}`);
     }
@@ -613,6 +624,7 @@ app.get("/api/admcloud/transactions/:id/items", authenticateToken, async (req, r
             i.[Quantity] as OrderedQuantity,
             i.[Price],
             i.[TaxAmount],
+            i.[TaxPercent],
             i.[TotalSalesAmount],
             ISNULL((
                 SELECT SUM(ri.[Quantity])
@@ -661,13 +673,21 @@ app.get("/api/admcloud/transactions/:id/items", authenticateToken, async (req, r
       // Limpiar la lista de recepciones (remover coma final y espacios)
       const receptions = it.ReceptionList ? it.ReceptionList.split(',').filter((r:string) => r.trim() !== '').join(', ') : '';
       
-      return {
+      const item = {
         ...it,
         ReceptionNumbers: receptions,
         PaidQuantity: paidObj?._sum?.quantity || 0
       };
+      
+      // Log para depuración de impuestos
+      if (it.TaxAmount === 0 && it.TaxPercent > 0) {
+        console.log(`⚠️ Item ${it.ItemID} tiene TaxPercent=${it.TaxPercent}% pero TaxAmount=0`);
+      }
+      
+      return item;
     });
-
+    
+    console.log(`✅ Items devueltos: ${finalItems.length}`);
     res.json(finalItems);
   } catch (error) {
     console.error("Error fetching transaction items:", error);
