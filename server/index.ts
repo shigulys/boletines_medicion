@@ -735,6 +735,7 @@ app.get("/api/budget-items/:id/measurements", authenticateToken, async (req, res
 // --- PAYMENT REQUESTS / BOLETINES ---
 
 const normalizeUnitOfMeasure = (unit?: string | null) => (unit || '').trim().toUpperCase();
+const normalizeVendorName = (vendorName?: string | null) => (vendorName || '').trim().toUpperCase();
 
 const getLastUnitsByItemForTx = async (externalTxID: string, excludePaymentRequestId?: number) => {
   const previousPaymentRequests = await prisma.paymentRequest.findMany({
@@ -778,6 +779,16 @@ const getValidUnitCodes = async (lines: any[]) => {
   });
 
   return new Set(units.map((unit) => unit.code));
+};
+
+const resolveScheduledLine = (paymentRequest: any) => {
+  if (!paymentRequest?.paymentScheduleLines || paymentRequest.paymentScheduleLines.length === 0) {
+    return null;
+  }
+
+  return paymentRequest.paymentScheduleLines.find((line: any) =>
+    line?.paymentSchedule?.status !== 'CANCELADA'
+  ) || paymentRequest.paymentScheduleLines[0];
 };
 
 app.post("/api/payment-requests", authenticateToken, async (req, res) => {
@@ -850,7 +861,7 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
         docNumber,
         externalTxID,
         docID,
-        vendorName,
+        vendorName: normalizeVendorName(vendorName),
         vendorFiscalID,
         projectName,
         receptionNumbers,
@@ -879,7 +890,20 @@ app.get("/api/payment-requests", authenticateToken, async (req, res) => {
   try {
     const prs = await prisma.paymentRequest.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { lines: true }
+      include: {
+        lines: true,
+        paymentScheduleLines: {
+          include: {
+            paymentSchedule: {
+              select: {
+                id: true,
+                scheduleNumber: true,
+                status: true
+              }
+            }
+          }
+        }
+      }
     });
     res.json(prs);
   } catch (error) {
@@ -891,17 +915,38 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { 
     lines, retentionPercent, advancePercent, isrPercent,
-    receptionNumbers, vendorFiscalID, measurementStartDate, measurementEndDate
+    receptionNumbers, vendorFiscalID, measurementStartDate, measurementEndDate, vendorName
   } = req.body;
 
   try {
     const prId = parseInt(id);
     const existingPR = await prisma.paymentRequest.findUnique({
       where: { id: prId },
-      include: { lines: true }
+      include: {
+        lines: true,
+        paymentScheduleLines: {
+          include: {
+            paymentSchedule: {
+              select: {
+                id: true,
+                scheduleNumber: true,
+                status: true
+              }
+            }
+          }
+        }
+      }
     });
 
     if (!existingPR) return res.status(404).json({ message: "Boletín no encontrado" });
+
+    const scheduledLine = resolveScheduledLine(existingPR);
+    if (scheduledLine) {
+      return res.status(400).json({
+        message: `No se puede editar un boletín programado en ${scheduledLine.paymentSchedule?.scheduleNumber || 'otra programación'}`
+      });
+    }
+
     if (existingPR.status !== "PENDIENTE") {
       return res.status(400).json({ message: "Solo se pueden modificar boletines en estado PENDIENTE" });
     }
@@ -982,6 +1027,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
           isrAmount,
           netTotal,
           receptionNumbers,
+          vendorName: vendorName ? normalizeVendorName(vendorName) : existingPR.vendorName,
           vendorFiscalID,
           measurementStartDate: measurementStartDate ? new Date(measurementStartDate) : null,
           measurementEndDate: measurementEndDate ? new Date(measurementEndDate) : null,
@@ -1041,6 +1087,579 @@ app.patch("/api/payment-requests/:id/status", authenticateToken, async (req: any
       message: "Error al cambiar el estado del boletín",
       detail: error.message 
     });
+  }
+});
+
+app.get("/api/payment-schedules/eligible-payment-requests", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin' && !req.user.accessContabilidad) {
+    return res.status(403).json({ message: "No tiene permiso para consultar boletines elegibles" });
+  }
+
+  try {
+    const eligible = await prisma.paymentRequest.findMany({
+      where: {
+        status: {
+          not: 'RECHAZADO'
+        },
+        paymentScheduleLines: {
+          none: {
+            paymentSchedule: {
+              status: {
+                not: 'CANCELADA'
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { lines: true }
+    });
+
+    res.json(eligible);
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al obtener boletines elegibles", detail: error.message });
+  }
+});
+
+app.get("/api/payment-schedules", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin' && !req.user.accessContabilidad) {
+    return res.status(403).json({ message: "No tiene permiso para consultar programaciones de pagos" });
+  }
+
+  try {
+    const schedules = await prisma.paymentSchedule.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        lines: {
+          include: {
+            paymentRequest: true
+          }
+        },
+        auditLogs: {
+          orderBy: { createdAt: 'desc' },
+          take: 20
+        }
+      }
+    });
+
+    res.json(schedules);
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al obtener programaciones de pagos", detail: error.message });
+  }
+});
+
+app.post("/api/payment-schedules", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin' && !req.user.accessContabilidad) {
+    return res.status(403).json({ message: "No tiene permiso para crear programaciones de pagos" });
+  }
+
+  const paymentRequestIds = Array.isArray(req.body?.paymentRequestIds)
+    ? req.body.paymentRequestIds.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id))
+    : [];
+  const notes = typeof req.body?.notes === 'string' ? req.body.notes.trim() : null;
+
+  if (paymentRequestIds.length === 0) {
+    return res.status(400).json({ message: "Debe seleccionar al menos un boletín" });
+  }
+
+  try {
+    const existingLines = await prisma.paymentScheduleLine.findMany({
+      where: {
+        paymentRequestId: { in: paymentRequestIds }
+      },
+      include: {
+        paymentSchedule: {
+          select: {
+            id: true,
+            scheduleNumber: true,
+            status: true
+          }
+        }
+      }
+    });
+
+    if (existingLines.length > 0) {
+      const refs = existingLines
+        .map((line) => line.paymentSchedule?.scheduleNumber)
+        .filter(Boolean)
+        .join(', ');
+      return res.status(400).json({
+        message: `Hay boletines ya incluidos en otra programación (${refs || 'sin referencia'})`
+      });
+    }
+
+    const selectedRequests = await prisma.paymentRequest.findMany({
+      where: { id: { in: paymentRequestIds } },
+      select: { id: true }
+    });
+
+    if (selectedRequests.length !== paymentRequestIds.length) {
+      return res.status(400).json({ message: "Uno o más boletines no existen" });
+    }
+
+    const count = await prisma.paymentSchedule.count();
+    const scheduleNumber = `PP-${(count + 1).toString().padStart(6, '0')}`;
+
+    const schedule = await prisma.$transaction(async (tx) => {
+      const created = await tx.paymentSchedule.create({
+        data: {
+          scheduleNumber,
+          notes,
+          lines: {
+            create: paymentRequestIds.map((paymentRequestId: number) => ({ paymentRequestId }))
+          }
+        },
+        include: {
+          lines: {
+            include: { paymentRequest: true }
+          }
+        }
+      });
+
+      await tx.paymentScheduleAudit.create({
+        data: {
+          paymentScheduleId: created.id,
+          action: 'CREATED',
+          statusBefore: null,
+          statusAfter: created.status,
+          detail: `Creada con ${paymentRequestIds.length} boletín(es)`,
+          createdBy: req.user.email
+        }
+      });
+
+      return created;
+    });
+
+    res.status(201).json(schedule);
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al crear programación de pagos", detail: error.message });
+  }
+});
+
+app.put("/api/payment-schedules/:id", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin' && !req.user.accessContabilidad) {
+    return res.status(403).json({ message: "No tiene permiso para editar programaciones de pagos" });
+  }
+
+  const scheduleId = Number(req.params.id);
+  if (!Number.isFinite(scheduleId)) {
+    return res.status(400).json({ message: "ID de programación inválido" });
+  }
+
+  const paymentRequestIds = Array.isArray(req.body?.paymentRequestIds)
+    ? req.body.paymentRequestIds.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id))
+    : [];
+  const notes = typeof req.body?.notes === 'string' ? req.body.notes.trim() : null;
+
+  try {
+    const existingSchedule = await prisma.paymentSchedule.findUnique({
+      where: { id: scheduleId },
+      include: {
+        lines: {
+          select: {
+            paymentRequestId: true
+          }
+        }
+      }
+    });
+
+    if (!existingSchedule) {
+      return res.status(404).json({ message: "Programación no encontrada" });
+    }
+
+    if (existingSchedule.status === 'ENVIADA_FINANZAS') {
+      return res.status(400).json({ message: "No se puede editar una programación enviada a finanzas" });
+    }
+
+    if (paymentRequestIds.length > 0) {
+      const selectedRequests = await prisma.paymentRequest.findMany({
+        where: {
+          id: { in: paymentRequestIds },
+          status: { not: 'RECHAZADO' }
+        },
+        select: { id: true }
+      });
+
+      if (selectedRequests.length !== paymentRequestIds.length) {
+        return res.status(400).json({ message: "Uno o más boletines no existen o están rechazados" });
+      }
+
+      const conflictingLines = await prisma.paymentScheduleLine.findMany({
+        where: {
+          paymentRequestId: { in: paymentRequestIds },
+          paymentScheduleId: { not: scheduleId },
+          paymentSchedule: {
+            status: {
+              not: 'CANCELADA'
+            }
+          }
+        },
+        include: {
+          paymentSchedule: {
+            select: {
+              scheduleNumber: true
+            }
+          }
+        }
+      });
+
+      if (conflictingLines.length > 0) {
+        const refs = conflictingLines
+          .map((line) => line.paymentSchedule?.scheduleNumber)
+          .filter(Boolean)
+          .join(', ');
+        return res.status(400).json({
+          message: `Hay boletines ya incluidos en otra programación (${refs || 'sin referencia'})`
+        });
+      }
+    }
+
+    const shouldResetApproval = existingSchedule.status === 'APROBADA';
+
+    const updatedSchedule = await prisma.$transaction(async (tx) => {
+      await tx.paymentScheduleLine.deleteMany({
+        where: { paymentScheduleId: scheduleId }
+      });
+
+      const updated = await tx.paymentSchedule.update({
+        where: { id: scheduleId },
+        data: {
+          notes,
+          status: shouldResetApproval ? 'PENDIENTE_APROBACION' : existingSchedule.status,
+          approvedAt: shouldResetApproval ? null : existingSchedule.approvedAt,
+          approvedBy: shouldResetApproval ? null : existingSchedule.approvedBy,
+          lines: {
+            create: paymentRequestIds.map((paymentRequestId: number) => ({ paymentRequestId }))
+          }
+        },
+        include: {
+          lines: {
+            include: { paymentRequest: true }
+          }
+        }
+      });
+
+      await tx.paymentScheduleAudit.create({
+        data: {
+          paymentScheduleId: updated.id,
+          action: 'UPDATED',
+          statusBefore: existingSchedule.status,
+          statusAfter: updated.status,
+          detail: shouldResetApproval
+            ? `Editada con ${paymentRequestIds.length} boletín(es). Perdió aprobación por cambios.`
+            : `Editada con ${paymentRequestIds.length} boletín(es).`,
+          createdBy: req.user.email
+        }
+      });
+
+      return updated;
+    });
+
+    res.json({
+      ...updatedSchedule,
+      approvalReset: shouldResetApproval,
+      message: shouldResetApproval
+        ? 'La programación fue actualizada y perdió el estado de aprobación'
+        : 'Programación actualizada con éxito'
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al editar programación de pagos", detail: error.message });
+  }
+});
+
+app.patch("/api/payment-schedules/:id/approve", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin' && !req.user.accessContabilidad) {
+    return res.status(403).json({ message: "No tiene permiso para aprobar programaciones de pagos" });
+  }
+
+  const scheduleId = Number(req.params.id);
+  if (!Number.isFinite(scheduleId)) {
+    return res.status(400).json({ message: "ID de programación inválido" });
+  }
+
+  try {
+    const schedule = await prisma.paymentSchedule.findUnique({
+      where: { id: scheduleId },
+      include: {
+        lines: {
+          include: {
+            paymentRequest: {
+              select: {
+                id: true,
+                docNumber: true,
+                status: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!schedule) {
+      return res.status(404).json({ message: "Programación no encontrada" });
+    }
+
+    if (schedule.status === 'ENVIADA_FINANZAS') {
+      return res.status(400).json({ message: "La programación ya fue enviada a finanzas" });
+    }
+
+    const notApprovedRequests = schedule.lines
+      .map((line) => line.paymentRequest)
+      .filter((paymentRequest) => paymentRequest.status !== 'APROBADO');
+
+    if (notApprovedRequests.length > 0) {
+      return res.status(400).json({
+        message: "No se puede aprobar la programación: contiene boletines pendientes de aprobación",
+        boletinesPendientes: notApprovedRequests.map((paymentRequest) => ({
+          id: paymentRequest.id,
+          docNumber: paymentRequest.docNumber,
+          status: paymentRequest.status
+        }))
+      });
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const approved = await tx.paymentSchedule.update({
+        where: { id: scheduleId },
+        data: {
+          status: 'APROBADA',
+          approvedAt: new Date(),
+          approvedBy: req.user.email
+        }
+      });
+
+      await tx.paymentScheduleAudit.create({
+        data: {
+          paymentScheduleId: approved.id,
+          action: 'APPROVED',
+          statusBefore: schedule.status,
+          statusAfter: approved.status,
+          detail: 'Aprobación de programación completada',
+          createdBy: req.user.email
+        }
+      });
+
+      return approved;
+    });
+
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al aprobar programación", detail: error.message });
+  }
+});
+
+app.post("/api/payment-schedules/:id/send-to-finance", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin' && !req.user.accessContabilidad) {
+    return res.status(403).json({ message: "No tiene permiso para enviar a finanzas" });
+  }
+
+  const scheduleId = Number(req.params.id);
+  if (!Number.isFinite(scheduleId)) {
+    return res.status(400).json({ message: "ID de programación inválido" });
+  }
+
+  try {
+    const schedule = await prisma.paymentSchedule.findUnique({
+      where: { id: scheduleId },
+      include: {
+        lines: {
+          include: {
+            paymentRequest: {
+              select: {
+                id: true,
+                docNumber: true,
+                status: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!schedule) {
+      return res.status(404).json({ message: "Programación no encontrada" });
+    }
+
+    if (schedule.status !== 'APROBADA') {
+      return res.status(400).json({ message: "La programación debe estar aprobada antes de enviar a finanzas" });
+    }
+
+    if (schedule.status === 'ENVIADA_FINANZAS') {
+      return res.status(400).json({ message: "La programación ya fue enviada a finanzas" });
+    }
+
+    const notApprovedRequests = schedule.lines
+      .map((line) => line.paymentRequest)
+      .filter((paymentRequest) => paymentRequest.status !== 'APROBADO');
+
+    if (notApprovedRequests.length > 0) {
+      return res.status(400).json({
+        message: "Todos los boletines deben estar aprobados antes de enviar a pago",
+        boletinesPendientes: notApprovedRequests.map((paymentRequest) => ({
+          id: paymentRequest.id,
+          docNumber: paymentRequest.docNumber,
+          status: paymentRequest.status
+        }))
+      });
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const sent = await tx.paymentSchedule.update({
+        where: { id: scheduleId },
+        data: {
+          status: 'ENVIADA_FINANZAS',
+          sentToFinanceAt: new Date(),
+          sentToFinanceBy: req.user.email
+        },
+        include: {
+          lines: {
+            include: { paymentRequest: true }
+          }
+        }
+      });
+
+      await tx.paymentScheduleAudit.create({
+        data: {
+          paymentScheduleId: sent.id,
+          action: 'SENT_TO_FINANCE',
+          statusBefore: schedule.status,
+          statusAfter: sent.status,
+          detail: 'Envío a finanzas realizado',
+          createdBy: req.user.email
+        }
+      });
+
+      return sent;
+    });
+
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al enviar programación a finanzas", detail: error.message });
+  }
+});
+
+app.patch("/api/payment-schedules/:id/restart-flow", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin' && !req.user.accessContabilidad) {
+    return res.status(403).json({ message: "No tiene permiso para reiniciar el flujo de programación" });
+  }
+
+  const scheduleId = Number(req.params.id);
+  if (!Number.isFinite(scheduleId)) {
+    return res.status(400).json({ message: "ID de programación inválido" });
+  }
+
+  try {
+    const schedule = await prisma.paymentSchedule.findUnique({
+      where: { id: scheduleId }
+    });
+
+    if (!schedule) {
+      return res.status(404).json({ message: "Programación no encontrada" });
+    }
+
+    if (schedule.status === 'PENDIENTE_APROBACION') {
+      return res.status(400).json({ message: "La programación ya está en el primer nivel (pendiente de aprobación)" });
+    }
+
+    const restarted = await prisma.$transaction(async (tx) => {
+      const reset = await tx.paymentSchedule.update({
+        where: { id: scheduleId },
+        data: {
+          status: 'PENDIENTE_APROBACION',
+          approvedAt: null,
+          approvedBy: null,
+          sentToFinanceAt: null,
+          sentToFinanceBy: null
+        },
+        include: {
+          lines: {
+            include: {
+              paymentRequest: true
+            }
+          }
+        }
+      });
+
+      await tx.paymentScheduleAudit.create({
+        data: {
+          paymentScheduleId: reset.id,
+          action: 'FLOW_RESTARTED',
+          statusBefore: schedule.status,
+          statusAfter: reset.status,
+          detail: 'Flujo reiniciado al primer nivel',
+          createdBy: req.user.email
+        }
+      });
+
+      return reset;
+    });
+
+    res.json({
+      ...restarted,
+      message: 'Flujo reiniciado: la programación debe aprobarse y enviarse nuevamente paso a paso'
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al reiniciar el flujo de programación", detail: error.message });
+  }
+});
+
+app.patch("/api/payment-schedules/:id/cancel", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin' && !req.user.accessContabilidad) {
+    return res.status(403).json({ message: "No tiene permiso para cancelar programaciones" });
+  }
+
+  const scheduleId = Number(req.params.id);
+  if (!Number.isFinite(scheduleId)) {
+    return res.status(400).json({ message: "ID de programación inválido" });
+  }
+
+  try {
+    const schedule = await prisma.paymentSchedule.findUnique({
+      where: { id: scheduleId }
+    });
+
+    if (!schedule) {
+      return res.status(404).json({ message: "Programación no encontrada" });
+    }
+
+    if (schedule.status === 'ENVIADA_FINANZAS') {
+      return res.status(400).json({ message: "No se puede cancelar una programación ya enviada a finanzas" });
+    }
+
+    if (schedule.status === 'CANCELADA') {
+      return res.status(400).json({ message: "La programación ya está cancelada" });
+    }
+
+    const cancelled = await prisma.$transaction(async (tx) => {
+      const canceled = await tx.paymentSchedule.update({
+        where: { id: scheduleId },
+        data: {
+          status: 'CANCELADA'
+        },
+        include: {
+          lines: {
+            include: { paymentRequest: true }
+          }
+        }
+      });
+
+      await tx.paymentScheduleAudit.create({
+        data: {
+          paymentScheduleId: canceled.id,
+          action: 'CANCELED',
+          statusBefore: schedule.status,
+          statusAfter: canceled.status,
+          detail: 'Programación cancelada y liberada',
+          createdBy: req.user.email
+        }
+      });
+
+      return canceled;
+    });
+
+    res.json(cancelled);
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al cancelar programación", detail: error.message });
   }
 });
 

@@ -10,11 +10,12 @@ import { AdmCloudTransactions } from './components/AdmCloudTransactions'
 import { BoletinMedicion } from './components/BoletinMedicion'
 import { RetentionManagement } from './components/RetentionManagement'
 import { UnitOfMeasureManagement } from './components/UnitOfMeasureManagement'
+import { PaymentScheduling } from './components/PaymentScheduling'
 
 function App() {
   const { user, isLoading } = useAuth();
   const [view, setView] = useState<'login' | 'register'>('login');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'budget' | 'admcloud' | 'boletin' | 'retentions' | 'units'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'budget' | 'admcloud' | 'boletin' | 'paymentScheduling' | 'retentions' | 'units'>('dashboard');
   const [isEditingInNewTab, setIsEditingInNewTab] = useState(false);
   const [subcontractCount, setSubcontractCount] = useState<number>(0);
   const [loadingSubcontracts, setLoadingSubcontracts] = useState<boolean>(false);
@@ -27,6 +28,12 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('editBoletin') || params.get('generateBoletin') || params.get('boletinSelection')) {
       setActiveTab('boletin');
+      setIsEditingInNewTab(true);
+      return;
+    }
+
+    if (params.get('paymentScheduleEdit')) {
+      setActiveTab('paymentScheduling');
       setIsEditingInNewTab(true);
     }
   }, []);
@@ -232,6 +239,8 @@ function App() {
         return <AdmCloudWrapper />;
       case 'boletin':
         return <BoletinWrapper />;
+      case 'paymentScheduling':
+        return <PaymentSchedulingWrapper />;
       case 'retentions':
         return user?.role === 'admin' ? <RetentionWrapper /> : <div>No tiene permiso para acceder a esta sección.</div>;
       case 'units':
@@ -260,6 +269,7 @@ function App() {
               onSelectBudget={() => setActiveTab('budget')}
               onSelectAdmCloud={() => setActiveTab('admcloud')}
               onSelectBoletin={() => setActiveTab('boletin')}
+              onSelectPaymentScheduling={() => setActiveTab('paymentScheduling')}
               onSelectRetentions={() => setActiveTab('retentions')}
               onSelectUnits={() => setActiveTab('units')}
             />
@@ -310,6 +320,16 @@ const BoletinWrapper = () => (
       <p>Gestión de cubicaciones y solicitudes de pago</p>
     </header>
     <BoletinMedicion />
+  </>
+);
+
+const PaymentSchedulingWrapper = () => (
+  <>
+    <header className="content-header">
+      <h1>Programación de Pagos</h1>
+      <p>Consolidación de boletines para aprobación y envío a finanzas</p>
+    </header>
+    <PaymentScheduling />
   </>
 );
 

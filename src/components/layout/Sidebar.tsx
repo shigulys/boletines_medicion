@@ -28,9 +28,10 @@ export const Sidebar: React.FC<{
   onSelectBudget: () => void;
   onSelectAdmCloud: () => void;
   onSelectBoletin: () => void;
+  onSelectPaymentScheduling: () => void;
   onSelectRetentions: () => void;
   onSelectUnits: () => void;
-}> = ({ onSelectManagement, onSelectDashboard, onSelectBudget, onSelectAdmCloud, onSelectBoletin, onSelectRetentions, onSelectUnits }) => {
+}> = ({ onSelectManagement, onSelectDashboard, onSelectBudget, onSelectAdmCloud, onSelectBoletin, onSelectPaymentScheduling, onSelectRetentions, onSelectUnits }) => {
   const { user, logout } = useAuth();
   const [openSection, setOpenSection] = useState<string | null>('Ingeniería');
   const [ordersCount, setOrdersCount] = useState<number>(0);
@@ -162,6 +163,7 @@ export const Sidebar: React.FC<{
                   <li onClick={onSelectBudget} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>📋</span>Presupuestos</li>
                   <li onClick={onSelectAdmCloud} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>☁️</span>AdmCloud PO</li>
                   <li onClick={onSelectBoletin} style={{ cursor: 'pointer', fontWeight: 'bold', color: '#1976d2' }}><span style={{ marginRight: '8px' }}>📋</span>Boletín de Medición</li>
+                  <li onClick={onSelectPaymentScheduling} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>💳</span>Programación de Pagos</li>
                   <li><span style={{ marginRight: '8px' }}>📦</span>Órdenes de Compra</li>
                   <li><span style={{ marginRight: '8px' }}>📄</span>Reportes Financieros</li>
                 </ul>

@@ -109,7 +109,48 @@ model PaymentRequest {
   status            String               @default("PENDIENTE") 
   rejectionReason   String?              // Motivo del rechazo (si aplica)
   lines             PaymentRequestLine[]
+  paymentScheduleLines PaymentScheduleLine[]
   createdAt         DateTime             @default(now())
+}
+
+model PaymentSchedule {
+  id               Int                   @id @default(autoincrement())
+  scheduleNumber   String                @unique
+  date             DateTime              @default(now())
+  status           String                @default("PENDIENTE_APROBACION") // PENDIENTE_APROBACION | APROBADA | ENVIADA_FINANZAS
+  notes            String?
+  approvedAt       DateTime?
+  approvedBy       String?
+  sentToFinanceAt  DateTime?
+  sentToFinanceBy  String?
+  lines            PaymentScheduleLine[]
+  auditLogs        PaymentScheduleAudit[]
+  createdAt        DateTime              @default(now())
+}
+
+model PaymentScheduleAudit {
+  id               Int             @id @default(autoincrement())
+  paymentScheduleId Int
+  action           String
+  statusBefore     String?
+  statusAfter      String?
+  detail           String?
+  createdBy        String?
+  createdAt        DateTime        @default(now())
+  paymentSchedule  PaymentSchedule @relation(fields: [paymentScheduleId], references: [id], onDelete: Cascade)
+
+  @@index([paymentScheduleId, createdAt])
+}
+
+model PaymentScheduleLine {
+  id               Int             @id @default(autoincrement())
+  paymentScheduleId Int
+  paymentRequestId Int             @unique
+  paymentSchedule  PaymentSchedule @relation(fields: [paymentScheduleId], references: [id], onDelete: Cascade)
+  paymentRequest   PaymentRequest  @relation(fields: [paymentRequestId], references: [id], onDelete: Restrict)
+  createdAt        DateTime        @default(now())
+
+  @@unique([paymentScheduleId, paymentRequestId])
 }
 
 model PaymentRequestLine {

@@ -9,11 +9,13 @@ interface Transaction {
   DocID: string;
   DocType: string;
   DocDate: string;
+  Date?: string;
   Reference: string | null;
   Status: number;
   VendorName?: string;
   VendorFiscalID?: string;
   ProjectName?: string;
+  JobNumber?: string;
   MeasurementStartDate?: string;
   MeasurementEndDate?: string;
   TotalAmount: number;
@@ -463,6 +465,15 @@ export const BoletinMedicion: React.FC = () => {
   };
 
   const handleEditBoletin = async (boletin: any) => {
+    const scheduledLine = boletin.paymentScheduleLines?.find(
+      (line: { paymentSchedule?: { status?: string; scheduleNumber?: string } }) =>
+        line?.paymentSchedule?.status !== 'CANCELADA'
+    );
+    if (scheduledLine) {
+      alert(`Este boletín no se puede editar porque está incluido en la programación ${scheduledLine.paymentSchedule?.scheduleNumber || ''}`);
+      return;
+    }
+
     setEditingId(boletin.id);
     setRetentionPercent(boletin.retentionPercent);
     setAdvancePercent(boletin.advancePercent);
@@ -638,7 +649,6 @@ export const BoletinMedicion: React.FC = () => {
       const key = `${line.retentionPercent}`;
       
       const st = line.quantity * line.unitPrice;
-      const tax = st * (line.taxPercent / 100);
       const retentionAmount = st * (line.retentionPercent / 100);
       
       if (!summary[key]) {
@@ -962,9 +972,7 @@ export const BoletinMedicion: React.FC = () => {
       const itemsData: any[] = [];
       
       // Procesar por transacción para agregar subtotales
-      itemsByTransaction.forEach((items, transactionId) => {
-        let totalOrdenadoOC = 0;
-        let totalRecibidoOC = 0;
+      itemsByTransaction.forEach((items) => {
         
         // Agregar items de esta transacción
         items.forEach(({ transaction, item }) => {
@@ -1095,10 +1103,6 @@ export const BoletinMedicion: React.FC = () => {
                    currencyValue === 'F5825D92-D608-4B7B-ADCD-08DDAA50AC6E') {
             moneda = 'DOP';
           }
-          
-          // Acumular totales de la OC
-          totalOrdenadoOC += totalOrdenado;
-          totalRecibidoOC += totalRecibido;
           
           // Agregar item al detalle
           itemsData.push({
@@ -1259,7 +1263,7 @@ export const BoletinMedicion: React.FC = () => {
     }
 
     const tableColumn = ["Descripción", "Unidad", "Recepción", "Cantidad", "Precio Unit.", "ITBIS", "Retención", "Total"];
-    const tableRows = (boletin.lines || []).map((l: any, idx: number) => {
+    const tableRows = (boletin.lines || []).map((l: any) => {
       const subtotal = l.quantity * l.unitPrice;
       const tax = subtotal * ((l.taxPercent || 0) / 100);
       const retention = subtotal * ((l.retentionPercent || 0) / 100);
@@ -1437,6 +1441,13 @@ export const BoletinMedicion: React.FC = () => {
   };
 
   const totals = calculateTotals();
+
+  const getScheduledInfo = (boletin: { paymentScheduleLines?: Array<{ paymentSchedule?: { status?: string; scheduleNumber?: string } }> }) => {
+    const scheduledLine = boletin.paymentScheduleLines?.find(
+      (line) => line?.paymentSchedule?.status !== 'CANCELADA'
+    );
+    return scheduledLine?.paymentSchedule || null;
+  };
 
   // Filtrar y Agrupar transacciones por proyecto
   const filteredTxs = transactions.filter(tx => {
@@ -1697,7 +1708,9 @@ export const BoletinMedicion: React.FC = () => {
                                 </tr>
                               </thead>
                               <tbody>
-                                {projectBoletines.map(b => (
+                                {projectBoletines.map(b => {
+                  const scheduledInfo = getScheduledInfo(b);
+                  return (
                   <tr key={b.id}>
                     <td><strong style={{ fontSize: '1rem', color: '#1976d2' }}>{b.docNumber}</strong></td>
                     <td style={{ whiteSpace: 'nowrap', fontSize: '0.95rem' }}>{new Date(b.date).toLocaleDateString('es-ES')}</td>
@@ -1727,6 +1740,13 @@ export const BoletinMedicion: React.FC = () => {
                       <span className={`status-badge-large status-${b.status.toLowerCase()}`}>
                         {b.status}
                       </span>
+                      {scheduledInfo && (
+                        <div style={{ marginTop: '6px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#0d47a1', background: '#e3f2fd', border: '1px solid #bbdefb', borderRadius: '999px', padding: '3px 8px', fontWeight: 600 }}>
+                            Programado: {scheduledInfo.scheduleNumber}
+                          </span>
+                        </div>
+                      )}
                       {b.status === 'RECHAZADO' && b.rejectionReason && (
                         <div style={{ 
                           marginTop: '8px', 
@@ -1749,9 +1769,11 @@ export const BoletinMedicion: React.FC = () => {
                         </button>
                         {b.status === "PENDIENTE" && (
                           <>
-                            <button className="btn-action-large btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
-                              <span>✏️</span> Editar
-                            </button>
+                            {!scheduledInfo && (
+                              <button className="btn-action-large btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
+                                <span>✏️</span> Editar
+                              </button>
+                            )}
                             {(user?.role === 'admin' || user?.accessContabilidad) && (
                               <div className="approval-group-large">
                                 <button className="btn-action-large btn-approve" onClick={() => handleStatusChange(b.id, 'APROBADO')}>
@@ -1767,7 +1789,7 @@ export const BoletinMedicion: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                );})}
               </tbody>
             </table>
           </div>
@@ -1806,7 +1828,9 @@ export const BoletinMedicion: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredBoletines.map(b => (
+                      {filteredBoletines.map(b => {
+                        const scheduledInfo = getScheduledInfo(b);
+                        return (
                         <tr key={b.id}>
                           <td style={{ fontWeight: '600', color: '#1976d2' }}>{b.docNumber}</td>
                           <td>{new Date(b.date).toLocaleDateString('es-DO')}</td>
@@ -1818,6 +1842,13 @@ export const BoletinMedicion: React.FC = () => {
                           </td>
                           <td style={{ textAlign: 'center' }}>
                             <span className={`status-badge status-${b.status.toLowerCase()}`}>{b.status}</span>
+                            {scheduledInfo && (
+                              <div style={{ marginTop: '6px' }}>
+                                <span style={{ fontSize: '0.72rem', color: '#0d47a1', background: '#e3f2fd', border: '1px solid #bbdefb', borderRadius: '999px', padding: '2px 8px', fontWeight: 600 }}>
+                                  {scheduledInfo.scheduleNumber}
+                                </span>
+                              </div>
+                            )}
                           </td>
                           <td>
                             <div className="action-buttons-container-large">
@@ -1826,9 +1857,11 @@ export const BoletinMedicion: React.FC = () => {
                               </button>
                               {b.status === "PENDIENTE" && (
                                 <>
-                                  <button className="btn-action-large btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
-                                    <span>✏️</span> Editar
-                                  </button>
+                                  {!scheduledInfo && (
+                                    <button className="btn-action-large btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
+                                      <span>✏️</span> Editar
+                                    </button>
+                                  )}
                                   {(user?.role === 'admin' || user?.accessContabilidad) && (
                                     <div className="approval-group-large">
                                       <button className="btn-action-large btn-approve" onClick={() => handleStatusChange(b.id, 'APROBADO')}>
@@ -1844,7 +1877,7 @@ export const BoletinMedicion: React.FC = () => {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                      );})}
                     </tbody>
                   </table>
                 </div>
