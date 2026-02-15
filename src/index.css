@@ -239,6 +239,7 @@ a:hover {
   grid-template-columns: repeat(3, 1fr);
   gap: 0.5rem;
   margin-bottom: 1rem;
+  align-items: stretch;
 }
 
 .quick-stat-item {
@@ -247,13 +248,27 @@ a:hover {
   background: white;
   border-radius: 8px;
   border: 1px solid #e1e8ed;
+  min-height: 84px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.quick-stat-item-last {
+  background: linear-gradient(135deg, #f8fbff 0%, #eef5ff 100%);
+  border: 1px solid #cfe3ff;
+}
+
+.quick-stat-item-last .stat-value {
+  color: #0d47a1;
 }
 
 .stat-value {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
   color: #1a1a1a;
   margin-bottom: 0.2rem;
+  line-height: 1.2;
 }
 
 .stat-label {
@@ -261,6 +276,18 @@ a:hover {
   color: #666;
   text-transform: uppercase;
   letter-spacing: 0.3px;
+}
+
+@media (max-width: 1200px) {
+  .quick-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 980px) {
+  .quick-stats {
+    grid-template-columns: 1fr;
+  }
 }
 
 .quick-info-section {

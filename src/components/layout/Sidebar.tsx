@@ -33,6 +33,66 @@ export const Sidebar: React.FC<{
 }> = ({ onSelectManagement, onSelectDashboard, onSelectBudget, onSelectAdmCloud, onSelectBoletin, onSelectRetentions, onSelectUnits }) => {
   const { user, logout } = useAuth();
   const [openSection, setOpenSection] = useState<string | null>('Ingeniería');
+  const [ordersCount, setOrdersCount] = useState<number>(0);
+  const [ordersAmountDop, setOrdersAmountDop] = useState<number>(0);
+  const [ordersAmountUsd, setOrdersAmountUsd] = useState<number>(0);
+  const [ordersCountDop, setOrdersCountDop] = useState<number>(0);
+  const [ordersCountUsd, setOrdersCountUsd] = useState<number>(0);
+  const [loadingSummary, setLoadingSummary] = useState<boolean>(false);
+
+  const resolveCurrency = (value?: string) => {
+    const currencyValue = String(value || '').trim().toUpperCase();
+    if (currencyValue === '2' || currencyValue === 'USD' || currencyValue === 'B99EF67E-9001-4BAA-ADCE-08DDAA50AC6E') {
+      return 'USD';
+    }
+    return 'DOP';
+  };
+
+  React.useEffect(() => {
+    const fetchOrdersSummary = async () => {
+      if (!user?.accessContabilidad && !user?.accessSubcontratos && !user?.accessIngenieria) return;
+
+      setLoadingSummary(true);
+      try {
+        const response = await fetch('http://localhost:5000/api/admcloud/transactions', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const summary = data.reduce((acc: { count: number; dop: number; usd: number; countDop: number; countUsd: number }, tx: { TotalAmount: number; Currency?: string }) => {
+            const amount = Number(tx.TotalAmount) || 0;
+            const currency = resolveCurrency(tx.Currency);
+            acc.count += 1;
+            if (currency === 'USD') {
+              acc.usd += amount;
+              acc.countUsd += 1;
+            } else {
+              acc.dop += amount;
+              acc.countDop += 1;
+            }
+            return acc;
+          }, { count: 0, dop: 0, usd: 0, countDop: 0, countUsd: 0 });
+
+          setOrdersCount(summary.count);
+          setOrdersAmountDop(summary.dop);
+          setOrdersAmountUsd(summary.usd);
+          setOrdersCountDop(summary.countDop);
+          setOrdersCountUsd(summary.countUsd);
+        }
+      } catch (error) {
+        console.error('Error cargando resumen de órdenes:', error);
+      } finally {
+        setLoadingSummary(false);
+      }
+    };
+
+    fetchOrdersSummary();
+  }, [user?.accessContabilidad, user?.accessSubcontratos, user?.accessIngenieria]);
+
+  const formatMoney = (amount: number) => amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   // Log para depurar el estado del usuario en el Sidebar
   console.log("Sidebar User State:", { email: user?.email, isApproved: user?.isApproved, role: user?.role });
@@ -133,31 +193,22 @@ export const Sidebar: React.FC<{
         </div>
         <div className="quick-stats">
           <div className="quick-stat-item">
-            <div className="stat-value">24</div>
-            <div className="stat-label">Documentos</div>
+            <div className="stat-value">{loadingSummary ? '...' : ordersCount}</div>
+            <div className="stat-label">Órdenes Generadas</div>
           </div>
           <div className="quick-stat-item">
-            <div className="stat-value">8</div>
-            <div className="stat-label">Tareas Hoy</div>
+            <div className="stat-value">{loadingSummary ? '...' : `$${formatMoney(ordersAmountDop)}`}</div>
+            <div className="stat-label">Total DOP</div>
+            <div className="stat-label" style={{ marginTop: '2px', fontSize: '0.7rem', opacity: 0.8 }}>
+              {loadingSummary ? '...' : `${ordersCountDop} órdenes`}
+            </div>
           </div>
-          <div className="quick-stat-item">
-            <div className="stat-value">$1.2M</div>
-            <div className="stat-label">En Proceso</div>
-          </div>
-        </div>
-        <div className="quick-info-section">
-          <div className="info-section-title">Actividad Reciente</div>
-          <div className="activity-item">
-            <div className="activity-dot"></div>
-            <div className="activity-text">Boletín #156 aprobado</div>
-          </div>
-          <div className="activity-item">
-            <div className="activity-dot"></div>
-            <div className="activity-text">OC-2024-89 recibida</div>
-          </div>
-          <div className="activity-item">
-            <div className="activity-dot"></div>
-            <div className="activity-text">3 docs pendientes</div>
+          <div className="quick-stat-item quick-stat-item-last">
+            <div className="stat-value">{loadingSummary ? '...' : `$${formatMoney(ordersAmountUsd)}`}</div>
+            <div className="stat-label">Total USD</div>
+            <div className="stat-label" style={{ marginTop: '2px', fontSize: '0.7rem', opacity: 0.8 }}>
+              {loadingSummary ? '...' : `${ordersCountUsd} órdenes`}
+            </div>
           </div>
         </div>
       </div>
