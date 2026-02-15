@@ -40,6 +40,8 @@ interface TransactionItem {
 interface BoletinLine {
   externalItemID: string;
   description: string;
+  unitOfMeasure?: string;
+  previousUnitOfMeasure?: string;
   receptionNumbers?: string;
   quantity: number;
   unitPrice: number;
@@ -53,9 +55,19 @@ interface BoletinLine {
   selected?: boolean;
 }
 
+interface UnitOfMeasureData {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+}
+
 const formatCurrency = (num: number) => {
   return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
+
+const normalizeUnitOfMeasure = (value?: string | null) => (value || '').trim().toUpperCase();
 
 export const BoletinMedicion: React.FC = () => {
   const { user } = useAuth() || {};
@@ -99,11 +111,31 @@ export const BoletinMedicion: React.FC = () => {
     description: string | null;
     isActive: boolean;
   }>>([]);
+  const [availableUnits, setAvailableUnits] = useState<UnitOfMeasureData[]>([]);
+
+  const getLastUnitsByItem = (externalTxID: string, excludeBoletinId?: number | null) => {
+    const unitsByItem = new Map<string, string>();
+
+    savedBoletines
+      .filter((b) => b.externalTxID === externalTxID && (!excludeBoletinId || b.id !== excludeBoletinId))
+      .forEach((boletin) => {
+        (boletin.lines || []).forEach((line: any) => {
+          if (unitsByItem.has(line.externalItemID)) return;
+          const normalized = normalizeUnitOfMeasure(line.unitOfMeasure);
+          if (normalized) {
+            unitsByItem.set(line.externalItemID, normalized);
+          }
+        });
+      });
+
+    return unitsByItem;
+  };
 
   useEffect(() => {
     fetchTransactions();
     fetchBoletinHistory();
     fetchActiveRetentions();
+    fetchActiveUnits();
     const params = new URLSearchParams(window.location.search);
     setIsNewTab(params.has('editBoletin') || params.has('generateBoletin') || params.has('boletinSelection'));
 
@@ -265,6 +297,35 @@ export const BoletinMedicion: React.FC = () => {
     }
   };
 
+  const fetchActiveUnits = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/units-of-measure/active', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableUnits(data);
+      }
+    } catch (err) {
+      console.error('Error cargando unidades de medida:', err);
+    }
+  };
+
+  const getUnitOptionsForLine = (line: BoletinLine) => {
+    const options = [...availableUnits];
+    const previousCode = normalizeUnitOfMeasure(line.previousUnitOfMeasure);
+    if (previousCode && !options.some((unit) => unit.code === previousCode)) {
+      options.unshift({
+        id: -1,
+        code: previousCode,
+        name: `${previousCode} (histórico)`,
+        description: 'Unidad usada previamente en boletines',
+        isActive: false
+      });
+    }
+    return options;
+  };
+
   const handleClose = () => {
     if (hasUnsavedChanges) {
       if (!confirm("Hay cambios sin guardar. ¿Está seguro que desea cerrar sin guardar?")) {
@@ -364,6 +425,7 @@ export const BoletinMedicion: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         setItems(data);
+        const previousUnitsByItem = getLastUnitsByItem(tx.ID);
         
         // Pre-poblar lineas con cantidad pendiente (Recibida - Ya solicitada en otros boletines)
         const initialLines = data.map((it: any) => {
@@ -376,6 +438,8 @@ export const BoletinMedicion: React.FC = () => {
           return {
             externalItemID: it.ItemID,
             description: it.Name,
+            unitOfMeasure: previousUnitsByItem.get(it.ItemID) || '',
+            previousUnitOfMeasure: previousUnitsByItem.get(it.ItemID) || '',
             receptionNumbers: lastReception,
             quantity: available > 0 ? available : 0, 
             unitPrice: it.Price,
@@ -465,6 +529,7 @@ export const BoletinMedicion: React.FC = () => {
       if (response.ok) {
         const ocItems = await response.json();
         setItems(ocItems);
+        const previousUnitsByItem = getLastUnitsByItem(boletin.externalTxID, boletin.id);
         
         // Mapear items de la OC, marcando seleccionados los que ya estaban en el boletín
         const initialLines = ocItems.map((it: TransactionItem) => {
@@ -485,6 +550,8 @@ export const BoletinMedicion: React.FC = () => {
           return {
             externalItemID: it.ItemID,
             description: it.Name,
+            unitOfMeasure: existingLine ? normalizeUnitOfMeasure(existingLine.unitOfMeasure) : (previousUnitsByItem.get(it.ItemID) || ''),
+            previousUnitOfMeasure: previousUnitsByItem.get(it.ItemID) || '',
             receptionNumbers: receptionNum,
             quantity: existingLine ? existingLine.quantity : (available > 0 ? available : 0),
             unitPrice: it.Price,
@@ -521,7 +588,13 @@ export const BoletinMedicion: React.FC = () => {
       const line = newLines[index];
       const subtotal = line.quantity * line.unitPrice;
       const taxAmount = subtotal * (line.taxPercent / 100);
-      newLines[index] = { ...newLines[index], taxAmount };
+      const previousUnit = normalizeUnitOfMeasure(line.previousUnitOfMeasure);
+      const currentUnit = normalizeUnitOfMeasure(line.unitOfMeasure);
+      newLines[index] = {
+        ...newLines[index],
+        taxAmount,
+        unitOfMeasure: currentUnit || previousUnit || line.unitOfMeasure
+      };
     }
     
     setLinesToPay(newLines);
@@ -609,7 +682,24 @@ export const BoletinMedicion: React.FC = () => {
             alert(`Error: La partida "${line.description}" excede la cantidad disponible para pago (Máximo disponible: ${available}).`);
             return;
         }
+
+        const normalizedUnit = normalizeUnitOfMeasure(line.unitOfMeasure);
+        if (!normalizedUnit) {
+          alert(`Error: Debe indicar la unidad de medida para la partida "${line.description}".`);
+          return;
+        }
+
+        const previousUnit = normalizeUnitOfMeasure(line.previousUnitOfMeasure);
+        if (previousUnit && previousUnit !== normalizedUnit) {
+          alert(`Error: La partida "${line.description}" debe usar la unidad "${previousUnit}" del boletín anterior.`);
+          return;
+        }
     }
+
+    const linesPayload = selectedLines.map((line) => ({
+      ...line,
+      unitOfMeasure: normalizeUnitOfMeasure(line.unitOfMeasure)
+    }));
 
     const totals = calculateTotals();
     if (totals.net <= 0) {
@@ -642,7 +732,7 @@ export const BoletinMedicion: React.FC = () => {
           advancePercent,
           isrPercent,
           receptionNumbers,
-          lines: selectedLines
+          lines: linesPayload
         })
       });
 
@@ -1168,13 +1258,16 @@ export const BoletinMedicion: React.FC = () => {
       doc.setTextColor(100); // Restaurar color
     }
 
-    const tableColumn = ["Descripción", "Recepción", "Cantidad", "Precio Unit.", "ITBIS", "Retención", "Total"];
+    const tableColumn = ["Descripción", "Unidad", "Recepción", "Cantidad", "Precio Unit.", "ITBIS", "Retención", "Total"];
     const tableRows = (boletin.lines || []).map((l: any, idx: number) => {
       const subtotal = l.quantity * l.unitPrice;
       const tax = subtotal * ((l.taxPercent || 0) / 100);
       const retention = subtotal * ((l.retentionPercent || 0) / 100);
       const itbisRetention = tax * ((l.itbisRetentionPercent || 0) / 100);
       const lineTotal = subtotal + tax - retention - itbisRetention;
+      const normalizedUnitCode = normalizeUnitOfMeasure(l.unitOfMeasure);
+      const unitFromCatalog = availableUnits.find((u) => u.code === normalizedUnitCode);
+      const unitDescription = unitFromCatalog?.name || unitFromCatalog?.description || l.unitOfMeasure || '-';
       
       let retentionText = '';
       if (l.retentionPercent > 0 || l.itbisRetentionPercent > 0) {
@@ -1188,6 +1281,7 @@ export const BoletinMedicion: React.FC = () => {
       
       return [
         l.description,
+        unitDescription,
         l.receptionNumbers || "",
         l.quantity,
         `$${formatCurrency(l.unitPrice)}`,
@@ -2051,6 +2145,7 @@ export const BoletinMedicion: React.FC = () => {
                     <th style={{ width: '80px', textAlign: 'center' }}>Disponible</th>
                     <th style={{ width: '100px', textAlign: 'center' }}>Cant. a Pagar</th>
                     <th style={{ width: '140px' }}>Recepción</th>
+                    <th style={{ width: '220px' }}>Unidad</th>
                     <th>Precio Unit.</th>
                     <th>Impuesto</th>
                     <th style={{ textAlign: 'right', width: '100px' }}>Total Impuesto</th>
@@ -2067,6 +2162,12 @@ export const BoletinMedicion: React.FC = () => {
                     const paidByOthers = (item?.PaidQuantity || 0) - existingInThisBoletin;
                     const available = (item?.ReceivedQuantity || 0) - paidByOthers;
                     const isOverpaid = line.quantity > (available + 0.0001); // Margen por flotantes
+                    const hasRegisteredMeasurement = (item?.ReceivedQuantity || 0) > 0;
+                    const canSelectLine = line.selected || (hasRegisteredMeasurement && available > 0);
+                    const normalizedUnit = normalizeUnitOfMeasure(line.unitOfMeasure);
+                    const previousUnit = normalizeUnitOfMeasure(line.previousUnitOfMeasure);
+                    const isUnitMissing = line.selected && !normalizedUnit;
+                    const isUnitMismatch = line.selected && !!previousUnit && normalizedUnit !== previousUnit;
 
                     return (
                       <tr key={idx} style={{ backgroundColor: isOverpaid ? '#fff5f5' : 'inherit' }}>
@@ -2075,6 +2176,8 @@ export const BoletinMedicion: React.FC = () => {
                             type="checkbox" 
                             checked={line.selected} 
                             onChange={(e) => updateLine(idx, 'selected', e.target.checked)}
+                            disabled={!canSelectLine}
+                            title={!canSelectLine ? 'Partida sin medición registrada o sin cantidad disponible' : ''}
                           />
                         </td>
                         <td>{line.description}</td>
@@ -2082,6 +2185,9 @@ export const BoletinMedicion: React.FC = () => {
                         <td style={{ textAlign: 'center', color: '#666' }}>{paidByOthers}</td>
                         <td style={{ textAlign: 'center', fontWeight: 'bold', color: available > 0 ? '#28a745' : '#d32f2f' }}>
                           {available}
+                          {!hasRegisteredMeasurement && (
+                            <div style={{ color: '#d32f2f', fontSize: '0.7rem', marginTop: '2px' }}>Sin medición</div>
+                          )}
                         </td>
                         <td>
                           <input 
@@ -2116,6 +2222,37 @@ export const BoletinMedicion: React.FC = () => {
                             }}
                             disabled={!line.selected}
                           />
+                        </td>
+                        <td>
+                          <select
+                            value={line.unitOfMeasure || ''}
+                            onChange={(e) => updateLine(idx, 'unitOfMeasure', e.target.value)}
+                            style={{
+                              width: '220px',
+                              fontSize: '0.85rem',
+                              padding: '4px 6px',
+                              border: (isUnitMissing || isUnitMismatch) ? '1px solid #d32f2f' : '1px solid #ddd',
+                              borderRadius: '4px',
+                              backgroundColor: line.selected ? '#fff' : '#f5f5f5',
+                              color: (isUnitMissing || isUnitMismatch) ? '#d32f2f' : '#000'
+                            }}
+                            disabled={!line.selected}
+                          >
+                            <option value="">Seleccione</option>
+                            {getUnitOptionsForLine(line).map((unit) => (
+                              <option key={`${unit.id}-${unit.code}`} value={unit.code}>
+                                {unit.code} - {unit.name}
+                              </option>
+                            ))}
+                          </select>
+                          {isUnitMissing && (
+                            <div style={{ color: '#d32f2f', fontSize: '0.7rem', marginTop: '2px' }}>Seleccione unidad</div>
+                          )}
+                          {isUnitMismatch && (
+                            <div style={{ color: '#d32f2f', fontSize: '0.7rem', marginTop: '2px' }}>
+                              Debe ser: {previousUnit}
+                            </div>
+                          )}
                         </td>
                         <td>${formatCurrency(line.unitPrice)}</td>
                       <td>

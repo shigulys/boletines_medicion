@@ -29,7 +29,8 @@ export const Sidebar: React.FC<{
   onSelectAdmCloud: () => void;
   onSelectBoletin: () => void;
   onSelectRetentions: () => void;
-}> = ({ onSelectManagement, onSelectDashboard, onSelectBudget, onSelectAdmCloud, onSelectBoletin, onSelectRetentions }) => {
+  onSelectUnits: () => void;
+}> = ({ onSelectManagement, onSelectDashboard, onSelectBudget, onSelectAdmCloud, onSelectBoletin, onSelectRetentions, onSelectUnits }) => {
   const { user, logout } = useAuth();
   const [openSection, setOpenSection] = useState<string | null>('Ingeniería');
 
@@ -117,6 +118,7 @@ export const Sidebar: React.FC<{
                   <ul>
                     <li onClick={onSelectManagement} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>👥</span>Usuarios y Permisos</li>
                     <li onClick={onSelectRetentions} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>📊</span>Catálogo de Retenciones</li>
+                    <li onClick={onSelectUnits} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>📐</span>Unidades de Medida</li>
                   </ul>
                 </AccordionItem>
               </div>

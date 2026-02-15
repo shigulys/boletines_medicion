@@ -734,6 +734,52 @@ app.get("/api/budget-items/:id/measurements", authenticateToken, async (req, res
 
 // --- PAYMENT REQUESTS / BOLETINES ---
 
+const normalizeUnitOfMeasure = (unit?: string | null) => (unit || '').trim().toUpperCase();
+
+const getLastUnitsByItemForTx = async (externalTxID: string, excludePaymentRequestId?: number) => {
+  const previousPaymentRequests = await prisma.paymentRequest.findMany({
+    where: {
+      externalTxID,
+      ...(excludePaymentRequestId ? { id: { not: excludePaymentRequestId } } : {})
+    },
+    orderBy: { createdAt: 'desc' },
+    include: { lines: true }
+  });
+
+  const unitsByItem = new Map<string, string>();
+
+  for (const request of previousPaymentRequests) {
+    for (const line of request.lines) {
+      if (unitsByItem.has(line.externalItemID)) continue;
+      const normalized = normalizeUnitOfMeasure((line as any).unitOfMeasure);
+      if (normalized) {
+        unitsByItem.set(line.externalItemID, normalized);
+      }
+    }
+  }
+
+  return unitsByItem;
+};
+
+const getValidUnitCodes = async (lines: any[]) => {
+  const requestedCodes = Array.from(
+    new Set(lines.map((line: any) => normalizeUnitOfMeasure(line.unitOfMeasure)).filter((code: string) => !!code))
+  );
+
+  if (requestedCodes.length === 0) {
+    return new Set<string>();
+  }
+
+  const units = await prisma.unitOfMeasure.findMany({
+    where: {
+      code: { in: requestedCodes }
+    },
+    select: { code: true }
+  });
+
+  return new Set(units.map((unit) => unit.code));
+};
+
 app.post("/api/payment-requests", authenticateToken, async (req, res) => {
   const { 
     externalTxID, docID, vendorName, vendorFiscalID, projectName, 
@@ -744,6 +790,8 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
   try {
     const count = await prisma.paymentRequest.count();
     const docNumber = `BM-${(count + 1).toString().padStart(6, '0')}`;
+    const previousUnitsByItem = await getLastUnitsByItemForTx(externalTxID);
+    const validUnitCodes = await getValidUnitCodes(lines || []);
 
     let subTotal = 0;
     let taxAmount = 0;
@@ -751,6 +799,20 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
     let totalItbisRetention = 0;
 
     const formattedLines = lines.map((l: any) => {
+      const normalizedUnit = normalizeUnitOfMeasure(l.unitOfMeasure);
+      if (!normalizedUnit) {
+        throw new Error(`La unidad de medida es obligatoria para la partida \"${l.description}\".`);
+      }
+
+      if (!validUnitCodes.has(normalizedUnit)) {
+        throw new Error(`La unidad de medida \"${normalizedUnit}\" no existe en el catálogo.`);
+      }
+
+      const previousUnit = previousUnitsByItem.get(l.externalItemID);
+      if (previousUnit && previousUnit !== normalizedUnit) {
+        throw new Error(`La partida \"${l.description}\" debe usar la unidad \"${previousUnit}\" según el boletín anterior.`);
+      }
+
       const lineTax = l.quantity * l.unitPrice * (l.taxPercent / 100);
       const lineRetention = (l.quantity * l.unitPrice) * ((l.retentionPercent || 0) / 100);
       const lineItbisRetention = lineTax * ((l.itbisRetentionPercent || 0) / 100);
@@ -764,6 +826,7 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
       return {
         externalItemID: l.externalItemID,
         description: l.description,
+        unitOfMeasure: normalizedUnit,
         receptionNumbers: l.receptionNumbers,
         quantity: l.quantity,
         unitPrice: l.unitPrice,
@@ -843,12 +906,29 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
       return res.status(400).json({ message: "Solo se pueden modificar boletines en estado PENDIENTE" });
     }
 
+    const previousUnitsByItem = await getLastUnitsByItemForTx(existingPR.externalTxID, prId);
+    const validUnitCodes = await getValidUnitCodes(lines || []);
+
     let subTotal = 0;
     let taxAmount = 0;
     let totalRetentionByLine = 0;
     let totalItbisRetention = 0;
 
     const formattedLines = lines.map((l: any) => {
+      const normalizedUnit = normalizeUnitOfMeasure(l.unitOfMeasure);
+      if (!normalizedUnit) {
+        throw new Error(`La unidad de medida es obligatoria para la partida \"${l.description}\".`);
+      }
+
+      if (!validUnitCodes.has(normalizedUnit)) {
+        throw new Error(`La unidad de medida \"${normalizedUnit}\" no existe en el catálogo.`);
+      }
+
+      const previousUnit = previousUnitsByItem.get(l.externalItemID);
+      if (previousUnit && previousUnit !== normalizedUnit) {
+        throw new Error(`La partida \"${l.description}\" debe usar la unidad \"${previousUnit}\" según el boletín anterior.`);
+      }
+
       const lineTax = l.quantity * l.unitPrice * (l.taxPercent / 100);
       const lineRetention = (l.quantity * l.unitPrice) * ((l.retentionPercent || 0) / 100);
       const lineItbisRetention = lineTax * ((l.itbisRetentionPercent || 0) / 100);
@@ -862,6 +942,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
       return {
         externalItemID: l.externalItemID,
         description: l.description,
+        unitOfMeasure: normalizedUnit,
         receptionNumbers: l.receptionNumbers,
         quantity: l.quantity,
         unitPrice: l.unitPrice,
@@ -964,6 +1045,113 @@ app.patch("/api/payment-requests/:id/status", authenticateToken, async (req: any
 });
 
 // ========= RETENCIONES CRUD =========
+
+// ========= UNIDADES DE MEDIDA CRUD =========
+
+app.get("/api/units-of-measure", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: "No tiene permiso para consultar unidades de medida" });
+  }
+
+  try {
+    const units = await prisma.unitOfMeasure.findMany({
+      orderBy: { code: 'asc' }
+    });
+    res.json(units);
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al obtener unidades de medida", detail: error.message });
+  }
+});
+
+app.get("/api/units-of-measure/active", authenticateToken, async (req: any, res) => {
+  try {
+    const units = await prisma.unitOfMeasure.findMany({
+      where: { isActive: true },
+      orderBy: { code: 'asc' }
+    });
+    res.json(units);
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al obtener unidades activas", detail: error.message });
+  }
+});
+
+app.post("/api/units-of-measure", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: "No tiene permiso para crear unidades de medida" });
+  }
+
+  const { code, name, description } = req.body;
+  const normalizedCode = normalizeUnitOfMeasure(code);
+
+  if (!normalizedCode || !name?.trim()) {
+    return res.status(400).json({ message: "Código y nombre son obligatorios" });
+  }
+
+  try {
+    const unit = await prisma.unitOfMeasure.create({
+      data: {
+        code: normalizedCode,
+        name: name.trim(),
+        description: description?.trim() || null
+      }
+    });
+    res.status(201).json(unit);
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      return res.status(400).json({ message: "Ya existe una unidad con ese código" });
+    }
+    res.status(500).json({ message: "Error al crear unidad de medida", detail: error.message });
+  }
+});
+
+app.put("/api/units-of-measure/:id", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: "No tiene permiso para actualizar unidades de medida" });
+  }
+
+  const { id } = req.params;
+  const { code, name, description, isActive } = req.body;
+  const normalizedCode = normalizeUnitOfMeasure(code);
+
+  if (!normalizedCode || !name?.trim()) {
+    return res.status(400).json({ message: "Código y nombre son obligatorios" });
+  }
+
+  try {
+    const unit = await prisma.unitOfMeasure.update({
+      where: { id: parseInt(id) },
+      data: {
+        code: normalizedCode,
+        name: name.trim(),
+        description: description?.trim() || null,
+        isActive: typeof isActive === 'boolean' ? isActive : true
+      }
+    });
+    res.json(unit);
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      return res.status(400).json({ message: "Ya existe una unidad con ese código" });
+    }
+    res.status(500).json({ message: "Error al actualizar unidad de medida", detail: error.message });
+  }
+});
+
+app.delete("/api/units-of-measure/:id", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: "No tiene permiso para eliminar unidades de medida" });
+  }
+
+  const { id } = req.params;
+
+  try {
+    await prisma.unitOfMeasure.delete({
+      where: { id: parseInt(id) }
+    });
+    res.json({ message: "Unidad eliminada con éxito" });
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al eliminar unidad de medida", detail: error.message });
+  }
+});
 
 // Obtener todas las retenciones
 app.get("/api/retentions", authenticateToken, async (req: any, res) => {

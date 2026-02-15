@@ -9,11 +9,12 @@ import { BudgetManagement } from './components/BudgetManagement'
 import { AdmCloudTransactions } from './components/AdmCloudTransactions'
 import { BoletinMedicion } from './components/BoletinMedicion'
 import { RetentionManagement } from './components/RetentionManagement'
+import { UnitOfMeasureManagement } from './components/UnitOfMeasureManagement'
 
 function App() {
   const { user, isLoading } = useAuth();
   const [view, setView] = useState<'login' | 'register'>('login');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'budget' | 'admcloud' | 'boletin' | 'retentions'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'budget' | 'admcloud' | 'boletin' | 'retentions' | 'units'>('dashboard');
   const [isEditingInNewTab, setIsEditingInNewTab] = useState(false);
   const [subcontractCount, setSubcontractCount] = useState<number>(0);
   const [loadingSubcontracts, setLoadingSubcontracts] = useState<boolean>(false);
@@ -233,6 +234,8 @@ function App() {
         return <BoletinWrapper />;
       case 'retentions':
         return user?.role === 'admin' ? <RetentionWrapper /> : <div>No tiene permiso para acceder a esta sección.</div>;
+      case 'units':
+        return user?.role === 'admin' ? <UnitsWrapper /> : <div>No tiene permiso para acceder a esta sección.</div>;
       default:
         return <div>Sección no encontrada.</div>;
     }
@@ -258,6 +261,7 @@ function App() {
               onSelectAdmCloud={() => setActiveTab('admcloud')}
               onSelectBoletin={() => setActiveTab('boletin')}
               onSelectRetentions={() => setActiveTab('retentions')}
+              onSelectUnits={() => setActiveTab('units')}
             />
           )}
           <main className="main-content">
@@ -316,6 +320,16 @@ const RetentionWrapper = () => (
       <p>Administración de tipos de retención para boletines de medición</p>
     </header>
     <RetentionManagement />
+  </>
+);
+
+const UnitsWrapper = () => (
+  <>
+    <header className="content-header">
+      <h1>Catálogo de Unidades de Medida</h1>
+      <p>Administración de unidades para uso en boletines de medición</p>
+    </header>
+    <UnitOfMeasureManagement />
   </>
 );
 

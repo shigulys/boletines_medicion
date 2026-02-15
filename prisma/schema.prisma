@@ -48,6 +48,16 @@ model Retention {
   updatedAt   DateTime @updatedAt
 }
 
+model UnitOfMeasure {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model BudgetItem {
   id          Int           @id @default(autoincrement())
   budgetId    Int
@@ -108,6 +118,7 @@ model PaymentRequestLine {
   paymentRequest   PaymentRequest @relation(fields: [paymentRequestId], references: [id], onDelete: Cascade)
   externalItemID   String
   description      String
+  unitOfMeasure    String?
   receptionNumbers String?        // Ej: ICI-RIN00001
   quantity         Float          // Cantidad a pagar en este boletín
   unitPrice        Float
