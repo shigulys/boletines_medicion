@@ -31,7 +31,7 @@ model Budget {
   projectName String
   description String?
   date        DateTime     @default(now())
-  totalAmount Float        @default(0)
+  totalAmount Decimal      @default(0) @db.Decimal(18, 6)
   items       BudgetItem[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -41,7 +41,7 @@ model Retention {
   id          Int      @id @default(autoincrement())
   code        String   @unique
   name        String
-  percentage  Float
+  percentage  Decimal  @db.Decimal(18, 6)
   description String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -65,9 +65,9 @@ model BudgetItem {
   code        String?       // Ej: 01.01.01
   description String
   unit        String?       // Ej: m2, UND, GLB
-  quantity    Float         @default(0)
-  unitPrice   Float         @default(0)
-  total       Float         @default(0)
+  quantity    Decimal       @default(0) @db.Decimal(18, 6)
+  unitPrice   Decimal       @default(0) @db.Decimal(18, 6)
+  total       Decimal       @default(0) @db.Decimal(18, 6)
   isChapter   Boolean       @default(false)
   measurements Measurement[]
 }
@@ -78,8 +78,8 @@ model Measurement {
   budgetItem      BudgetItem @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
   externalTransID String     // AdmCloud TransID
   externalItemID  String     // AdmCloud ItemID
-  quantity        Float      // Cantidad medida/vinculada
-  price           Float      // Precio en la OC
+  quantity        Decimal    @db.Decimal(18, 6) // Cantidad medida/vinculada
+  price           Decimal    @db.Decimal(18, 6) // Precio en la OC
   date            DateTime   @default(now())
   notes           String?
   createdAt       DateTime   @default(now())
@@ -97,15 +97,15 @@ model PaymentRequest {
   measurementStartDate DateTime?            // Periodo de medición - desde
   measurementEndDate   DateTime?            // Periodo de medición - hasta
   date                 DateTime             @default(now())
-  subTotal          Float
-  taxAmount         Float
-  retentionPercent  Float                @default(0) // Ej: 5% Fondo Reparo
-  retentionAmount   Float                @default(0)
-  advancePercent    Float                @default(0) // Descuento de anticipo
-  advanceAmount     Float                @default(0)
-  isrPercent        Float                @default(0) // Retención ISR
-  isrAmount         Float                @default(0)
-  netTotal          Float                // subTotal + tax - retenciones
+  subTotal          Decimal              @db.Decimal(18, 6)
+  taxAmount         Decimal              @db.Decimal(18, 6)
+  retentionPercent  Decimal              @default(0) @db.Decimal(18, 6) // Ej: 5% Fondo Reparo
+  retentionAmount   Decimal              @default(0) @db.Decimal(18, 6)
+  advancePercent    Decimal              @default(0) @db.Decimal(18, 6) // Descuento de anticipo
+  advanceAmount     Decimal              @default(0) @db.Decimal(18, 6)
+  isrPercent        Decimal              @default(0) @db.Decimal(18, 6) // Retención ISR
+  isrAmount         Decimal              @default(0) @db.Decimal(18, 6)
+  netTotal          Decimal              @db.Decimal(18, 6) // subTotal + tax - retenciones
   status            String               @default("PENDIENTE") 
   rejectionReason   String?              // Motivo del rechazo (si aplica)
   lines             PaymentRequestLine[]
@@ -163,13 +163,13 @@ model PaymentRequestLine {
   description      String
   unitOfMeasure    String?
   receptionNumbers String?        // Ej: ICI-RIN00001
-  quantity         Float          // Cantidad a pagar en este boletín
-  unitPrice        Float
+  quantity         Decimal        @db.Decimal(18, 6) // Cantidad a pagar en este boletín
+  unitPrice        Decimal        @db.Decimal(18, 6)
   taxType          String         // Ej: ITBIS 18%, ITBIS 0%
-  taxPercent       Float
-  taxAmount        Float          // Calculado x linea
-  retentionPercent Float          @default(0) // Retención por línea (ej: 5%)
-  retentionAmount  Float          @default(0) // Monto retenido por línea
-  itbisRetentionPercent Float     @default(0) // Retención de ITBIS (0%, 10%, 100%)
-  totalLine        Float          // quantity * unitPrice + taxAmount - retentionAmount
+  taxPercent       Decimal        @db.Decimal(18, 6)
+  taxAmount        Decimal        @db.Decimal(18, 6) // Calculado x linea
+  retentionPercent Decimal        @default(0) @db.Decimal(18, 6) // Retención por línea (ej: 5%)
+  retentionAmount  Decimal        @default(0) @db.Decimal(18, 6) // Monto retenido por línea
+  itbisRetentionPercent Decimal   @default(0) @db.Decimal(18, 6) // Retención de ITBIS (0%, 10%, 100%)
+  totalLine        Decimal        @db.Decimal(18, 6) // quantity * unitPrice + taxAmount - retentionAmount
 }

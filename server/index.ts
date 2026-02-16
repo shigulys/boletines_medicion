@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import multer from "multer";
 import * as XLSX from "xlsx";
+import { Prisma } from "@prisma/client";
 import prisma from "./db";
 import { connectAdmCloud } from "./admcloud_db";
 import { sendApprovalEmail, sendNewRequestEmailToAdmin } from "./mail";
@@ -23,6 +24,40 @@ console.log("-----------------------------------------");
 
 app.use(cors());
 app.use(express.json());
+
+const normalizePrismaDecimals = (value: unknown): unknown => {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (Prisma.Decimal.isDecimal(value)) {
+    return Number(value.toString());
+  }
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizePrismaDecimals(item));
+  }
+
+  if (typeof value === "object") {
+    const normalized: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      normalized[key] = normalizePrismaDecimals(item);
+    }
+    return normalized;
+  }
+
+  return value;
+};
+
+app.use((req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = ((body: unknown) => originalJson(normalizePrismaDecimals(body))) as typeof res.json;
+  next();
+});
 
 // Auth Middleware
 const authenticateToken = (req: any, res: any, next: () => void) => {
