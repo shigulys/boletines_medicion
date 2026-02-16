@@ -10,6 +10,7 @@ type PaymentRequest = {
   id: number;
   docNumber: string;
   docID: string;
+  date: string;
   vendorName: string;
   projectName?: string | null;
   netTotal: number;
@@ -20,6 +21,8 @@ type PaymentSchedule = {
   id: number;
   scheduleNumber: string;
   date: string;
+  commitmentDate: string;
+  paymentDate: string;
   status: 'PENDIENTE_APROBACION' | 'APROBADA' | 'ENVIADA_FINANZAS' | 'CANCELADA';
   notes?: string | null;
   auditLogs?: Array<{
@@ -39,6 +42,17 @@ type PaymentSchedule = {
 
 const formatCurrency = (num: number) =>
   num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const getTodayInputDate = () => new Date().toISOString().split('T')[0];
+
+const toInputDate = (value?: string | null) => {
+  if (!value) return getTodayInputDate();
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return getTodayInputDate();
+  return parsed.toISOString().split('T')[0];
+};
+
+const toUtcStartTime = (value: string) => new Date(`${value}T00:00:00.000Z`).getTime();
 
 const statusLabel = (status: string) => {
   if (status === 'PENDIENTE_APROBACION') return 'Pendiente de aprobación';
@@ -83,7 +97,11 @@ export const PaymentScheduling: React.FC = () => {
   const [editingWasApproved, setEditingWasApproved] = useState(false);
   const [editingOriginalRequestIds, setEditingOriginalRequestIds] = useState<number[]>([]);
   const [editingOriginalNotes, setEditingOriginalNotes] = useState('');
+  const [editingOriginalCommitmentDate, setEditingOriginalCommitmentDate] = useState(getTodayInputDate());
+  const [editingOriginalPaymentDate, setEditingOriginalPaymentDate] = useState(getTodayInputDate());
   const [selectedRequestIds, setSelectedRequestIds] = useState<number[]>([]);
+  const [commitmentDate, setCommitmentDate] = useState(getTodayInputDate());
+  const [paymentDate, setPaymentDate] = useState(getTodayInputDate());
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -185,6 +203,8 @@ export const PaymentScheduling: React.FC = () => {
     const normalizedCurrentNotes = notes.trim();
     const normalizedOriginalNotes = editingOriginalNotes.trim();
     const notesChanged = normalizedCurrentNotes !== normalizedOriginalNotes;
+    const commitmentDateChanged = commitmentDate !== editingOriginalCommitmentDate;
+    const paymentDateChanged = paymentDate !== editingOriginalPaymentDate;
 
     const currentIds = [...selectedRequestIds].sort((a, b) => a - b);
     const originalIds = [...editingOriginalRequestIds].sort((a, b) => a - b);
@@ -194,8 +214,8 @@ export const PaymentScheduling: React.FC = () => {
     }
 
     const idsChanged = currentIds.some((id, index) => id !== originalIds[index]);
-    return notesChanged || idsChanged;
-  }, [editingScheduleId, notes, editingOriginalNotes, selectedRequestIds, editingOriginalRequestIds]);
+    return notesChanged || idsChanged || commitmentDateChanged || paymentDateChanged;
+  }, [editingScheduleId, notes, editingOriginalNotes, selectedRequestIds, editingOriginalRequestIds, commitmentDate, editingOriginalCommitmentDate, paymentDate, editingOriginalPaymentDate]);
 
   const toggleRequest = (requestId: number) => {
     setSelectedRequestIds((prev) => {
@@ -212,8 +232,37 @@ export const PaymentScheduling: React.FC = () => {
   };
 
   const createSchedule = async () => {
+    if (!commitmentDate) {
+      alert('Seleccione la fecha del compromiso.');
+      return;
+    }
+
+    if (!paymentDate) {
+      alert('Seleccione la fecha de pago.');
+      return;
+    }
+
     if (selectedRequestIds.length === 0 && editingScheduleId === null) {
       alert('Seleccione al menos un boletín para programar.');
+      return;
+    }
+
+    const editingSchedule = schedules.find((schedule) => schedule.id === editingScheduleId);
+    const scheduleDateBase = editingSchedule ? toInputDate(editingSchedule.date) : getTodayInputDate();
+    if (toUtcStartTime(paymentDate) < toUtcStartTime(scheduleDateBase)) {
+      alert('La fecha de pago debe ser igual o mayor a la fecha de programación.');
+      return;
+    }
+
+    const commitmentLimit = new Date(`${commitmentDate}T23:59:59.999Z`).getTime();
+    const selectedRequests = selectableRequests.filter((request) => selectedRequestIds.includes(request.id));
+    const invalidRequest = selectedRequests.find((request) => {
+      const requestDate = new Date(request.date).getTime();
+      return Number.isFinite(requestDate) && requestDate > commitmentLimit;
+    });
+
+    if (invalidRequest) {
+      alert(`El boletín ${invalidRequest.docNumber} tiene fecha mayor a la fecha del compromiso.`);
       return;
     }
 
@@ -256,6 +305,8 @@ export const PaymentScheduling: React.FC = () => {
         },
         body: JSON.stringify({
           paymentRequestIds: selectedRequestIds,
+          commitmentDate,
+          paymentDate,
           notes
         })
       });
@@ -270,6 +321,8 @@ export const PaymentScheduling: React.FC = () => {
             id: Number(data.id),
             scheduleNumber: data.scheduleNumber,
             date: data.date,
+            commitmentDate: data.commitmentDate,
+            paymentDate: data.paymentDate,
             status: data.status,
             notes: data.notes,
             lines: Array.isArray(data.lines)
@@ -287,6 +340,10 @@ export const PaymentScheduling: React.FC = () => {
       setEditingWasApproved(false);
       setEditingOriginalRequestIds([]);
       setEditingOriginalNotes('');
+      setEditingOriginalCommitmentDate(getTodayInputDate());
+      setEditingOriginalPaymentDate(getTodayInputDate());
+      setCommitmentDate(getTodayInputDate());
+      setPaymentDate(getTodayInputDate());
       setError('');
       await fetchData();
       if (isEditing) {
@@ -318,7 +375,11 @@ export const PaymentScheduling: React.FC = () => {
     setEditingWasApproved(false);
     setEditingOriginalRequestIds([]);
     setEditingOriginalNotes('');
+    setEditingOriginalCommitmentDate(getTodayInputDate());
+    setEditingOriginalPaymentDate(getTodayInputDate());
     setSelectedRequestIds([]);
+    setCommitmentDate(getTodayInputDate());
+    setPaymentDate(getTodayInputDate());
     setNotes('');
   };
 
@@ -351,6 +412,12 @@ export const PaymentScheduling: React.FC = () => {
     setEditingWasApproved(targetSchedule.status === 'APROBADA');
     setSelectedRequestIds(editableIds);
     setEditingOriginalRequestIds(editableIds);
+    const scheduleCommitmentDate = toInputDate(targetSchedule.commitmentDate);
+    setCommitmentDate(scheduleCommitmentDate);
+    setEditingOriginalCommitmentDate(scheduleCommitmentDate);
+    const schedulePaymentDate = toInputDate(targetSchedule.paymentDate);
+    setPaymentDate(schedulePaymentDate);
+    setEditingOriginalPaymentDate(schedulePaymentDate);
     setNotes(targetSchedule.notes || '');
     setEditingOriginalNotes(targetSchedule.notes || '');
     setInitializedFromUrl(true);
@@ -761,11 +828,12 @@ export const PaymentScheduling: React.FC = () => {
         ) : (
           <>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1020px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1120px' }}>
                 <thead>
                   <tr>
                     <th style={{ padding: '10px', borderBottom: '1px solid #ddd', textAlign: 'center' }}>Sel.</th>
                     <th style={{ padding: '10px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Boletín</th>
+                    <th style={{ padding: '10px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Fecha boletín</th>
                     <th style={{ padding: '10px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>OC</th>
                     <th style={{ padding: '10px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Proyecto</th>
                     <th style={{ padding: '10px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Proveedor</th>
@@ -789,6 +857,7 @@ export const PaymentScheduling: React.FC = () => {
                           />
                         </td>
                         <td style={{ padding: '10px', borderBottom: '1px solid #f0f0f0', fontWeight: 600, color: '#1976d2' }}>{request.docNumber}</td>
+                        <td style={{ padding: '10px', borderBottom: '1px solid #f0f0f0' }}>{new Date(request.date).toLocaleDateString('es-DO')}</td>
                         <td style={{ padding: '10px', borderBottom: '1px solid #f0f0f0' }}>{request.docID}</td>
                         <td style={{ padding: '10px', borderBottom: '1px solid #f0f0f0' }}>{request.projectName || 'Sin proyecto'}</td>
                         <td style={{ padding: '10px', borderBottom: '1px solid #f0f0f0' }}>{request.vendorName}</td>
@@ -837,6 +906,32 @@ export const PaymentScheduling: React.FC = () => {
             </div>
 
             <div style={{ marginTop: '14px', display: 'grid', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'grid', gap: '6px', maxWidth: '320px' }}>
+                  <label htmlFor="paymentDate" style={{ fontSize: '0.9rem', color: '#455a64', fontWeight: 600 }}>
+                    Fecha de pago / fondos disponibles
+                  </label>
+                  <input
+                    id="paymentDate"
+                    type="date"
+                    value={paymentDate}
+                    onChange={(event) => setPaymentDate(event.target.value)}
+                    style={{ borderRadius: '6px', border: '1px solid #ddd', padding: '8px 10px' }}
+                  />
+                </div>
+                <div style={{ display: 'grid', gap: '6px', maxWidth: '320px' }}>
+                  <label htmlFor="commitmentDate" style={{ fontSize: '0.9rem', color: '#455a64', fontWeight: 600 }}>
+                    Fecha del compromiso
+                  </label>
+                  <input
+                    id="commitmentDate"
+                    type="date"
+                    value={commitmentDate}
+                    onChange={(event) => setCommitmentDate(event.target.value)}
+                    style={{ borderRadius: '6px', border: '1px solid #ddd', padding: '8px 10px' }}
+                  />
+                </div>
+              </div>
               <textarea
                 rows={3}
                 placeholder="Notas de la programación (opcional)"
@@ -947,6 +1042,12 @@ export const PaymentScheduling: React.FC = () => {
                     <div>
                       <strong style={{ color: '#1565c0' }}>{schedule.scheduleNumber}</strong>
                       <div style={{ color: '#666', fontSize: '0.9rem' }}>{new Date(schedule.date).toLocaleDateString('es-DO')}</div>
+                      <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                        Compromiso: {new Date(schedule.commitmentDate).toLocaleDateString('es-DO')}
+                      </div>
+                      <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                        Pago/Fondos: {new Date(schedule.paymentDate).toLocaleDateString('es-DO')}
+                      </div>
                     </div>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                       <span style={{

@@ -74,6 +74,7 @@ a:hover {
   left: 0;
   box-shadow: 2px 0 10px rgba(0,0,0,0.02);
   flex-shrink: 0;
+  --sidebar-transition-speed: 0.18s;
 }
 
 /* Sidebar compacto para pantallas grandes */
@@ -86,7 +87,7 @@ a:hover {
 .sidebar-brand {
   padding: 1.2rem;
   border-bottom: 1px solid #eee;
-  transition: all 0.3s ease;
+  transition: background-color var(--sidebar-transition-speed) ease, border-color var(--sidebar-transition-speed) ease;
 }
 
 .sidebar-brand:hover {
@@ -121,6 +122,14 @@ a:hover {
   background-color: #f8f9fa;
   margin: 0.8rem;
   border-radius: 8px;
+  border: 1px solid #e9edf2;
+  transition: transform var(--sidebar-transition-speed) ease, box-shadow var(--sidebar-transition-speed) ease, border-color var(--sidebar-transition-speed) ease;
+}
+
+.sidebar-user:hover {
+  transform: translateY(-1px);
+  border-color: #cfd8e3;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
 }
 
 .user-avatar {
@@ -179,23 +188,29 @@ a:hover {
   font-weight: 600;
   font-size: 0.8rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color var(--sidebar-transition-speed) ease, color var(--sidebar-transition-speed) ease, transform var(--sidebar-transition-speed) ease, box-shadow var(--sidebar-transition-speed) ease, border-color var(--sidebar-transition-speed) ease;
   text-align: left;
+  border: 1px solid transparent;
 }
 
 .accordion-header:hover {
   background-color: #f0f7ff;
   color: #0056b3;
+  transform: translateY(-1px);
+  border-color: #d6e5f7;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
 }
 
 .accordion-header.active {
   color: #0056b3;
   background-color: #eef6ff;
+  border-color: #cfe0f5;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
 }
 
 .accordion-icon {
   font-size: 0.7rem;
-  transition: transform 0.3s;
+  transition: transform var(--sidebar-transition-speed);
 }
 
 .accordion-icon.open {
@@ -205,7 +220,7 @@ a:hover {
 .accordion-content {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 0.3s ease-out;
+  transition: max-height var(--sidebar-transition-speed) ease-out;
 }
 
 .accordion-content.show {
@@ -223,6 +238,11 @@ a:hover {
   padding: 1rem 0.8rem;
   background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
   border-top: 1px solid #dee2e6;
+  transition: box-shadow var(--sidebar-transition-speed) ease;
+}
+
+.sidebar-quick-info:hover {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 -2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .quick-info-header {
@@ -244,7 +264,7 @@ a:hover {
 
 .quick-stat-item {
   text-align: center;
-  padding: 0.6rem 0.3rem;
+  padding: 0.65rem 0.4rem;
   background: white;
   border-radius: 8px;
   border: 1px solid #e1e8ed;
@@ -252,23 +272,36 @@ a:hover {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  box-sizing: border-box;
+  transition: transform var(--sidebar-transition-speed) ease, box-shadow var(--sidebar-transition-speed) ease, border-color var(--sidebar-transition-speed) ease;
 }
 
-.quick-stat-item-last {
-  background: linear-gradient(135deg, #f8fbff 0%, #eef5ff 100%);
-  border: 1px solid #cfe3ff;
+.quick-stat-item:hover {
+  transform: translateY(-1px);
+  border-color: #cfd8e3;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
 }
 
-.quick-stat-item-last .stat-value {
-  color: #0d47a1;
+@media (max-width: 1366px) {
+  .sidebar-user:hover,
+  .accordion-header:hover,
+  .quick-stat-item:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  }
+
+  .sidebar-quick-info:hover {
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 -1px 4px rgba(0, 0, 0, 0.03);
+  }
 }
 
 .stat-value {
-  font-size: 1rem;
+  font-size: 0.98rem;
   font-weight: 700;
   color: #1a1a1a;
   margin-bottom: 0.2rem;
   line-height: 1.2;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-label {
@@ -276,6 +309,7 @@ a:hover {
   color: #666;
   text-transform: uppercase;
   letter-spacing: 0.3px;
+  line-height: 1.15;
 }
 
 @media (max-width: 1200px) {
@@ -339,7 +373,7 @@ a:hover {
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color var(--sidebar-transition-speed) ease, color var(--sidebar-transition-speed) ease, border-color var(--sidebar-transition-speed) ease;
 }
 
 .logout-button:hover {
@@ -530,6 +564,52 @@ a:hover {
   justify-content: space-between;
   align-items: center;
   font-size: 0.85rem;
+}
+
+.dashboard-bottom-summary {
+  margin-top: 2rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border: 1px solid #dee2e6;
+  border-radius: 12px;
+  padding: 1rem;
+  max-width: 1020px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.dashboard-quick-stats {
+  margin: 0 auto;
+  grid-template-columns: repeat(3, minmax(180px, 260px));
+  justify-content: center;
+}
+
+.dashboard-quick-stats .stat-value {
+  font-size: clamp(0.9rem, 1vw, 1.02rem);
+  letter-spacing: -0.01em;
+}
+
+@media (max-width: 980px) {
+  .dashboard-bottom-summary {
+    padding: 0.85rem;
+  }
+
+  .dashboard-quick-stats {
+    grid-template-columns: repeat(2, minmax(170px, 250px));
+  }
+
+  .dashboard-quick-stats .stat-value {
+    font-size: 0.94rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-quick-stats {
+    grid-template-columns: minmax(150px, 260px);
+  }
+
+  .dashboard-quick-stats .stat-value {
+    font-size: 0.9rem;
+  }
 }
 
 .footer-stat {

@@ -1148,6 +1148,62 @@ app.get("/api/payment-schedules", authenticateToken, async (req: any, res) => {
   }
 });
 
+const parseCommitmentDateInput = (value: unknown): Date | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsedDate = new Date(`${trimmed}T00:00:00.000Z`);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return parsedDate;
+};
+
+const parsePaymentDateInput = (value: unknown): Date | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsedDate = new Date(`${trimmed}T00:00:00.000Z`);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return parsedDate;
+};
+
+const getStartOfUtcDay = (date: Date): Date => {
+  const start = new Date(date);
+  start.setUTCHours(0, 0, 0, 0);
+  return start;
+};
+
+const getEndOfUtcDay = (date: Date): Date => {
+  const end = new Date(date);
+  end.setUTCHours(23, 59, 59, 999);
+  return end;
+};
+
+const getFirstBoletinAfterCommitment = (
+  requests: Array<{ docNumber: string; date: Date }>,
+  commitmentDate: Date
+) => {
+  const commitmentEnd = getEndOfUtcDay(commitmentDate).getTime();
+  return requests.find((request) => new Date(request.date).getTime() > commitmentEnd);
+};
+
 app.post("/api/payment-schedules", authenticateToken, async (req: any, res) => {
   if (req.user.role !== 'admin' && !req.user.accessContabilidad) {
     return res.status(403).json({ message: "No tiene permiso para crear programaciones de pagos" });
@@ -1157,6 +1213,23 @@ app.post("/api/payment-schedules", authenticateToken, async (req: any, res) => {
     ? req.body.paymentRequestIds.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id))
     : [];
   const notes = typeof req.body?.notes === 'string' ? req.body.notes.trim() : null;
+  const commitmentDate = parseCommitmentDateInput(req.body?.commitmentDate);
+  const paymentDate = parsePaymentDateInput(req.body?.paymentDate);
+
+  if (!commitmentDate) {
+    return res.status(400).json({ message: "Debe indicar una fecha de compromiso válida" });
+  }
+
+  if (!paymentDate) {
+    return res.status(400).json({ message: "Debe indicar una fecha de pago válida" });
+  }
+
+  const scheduleDateReference = new Date();
+  if (paymentDate.getTime() < getStartOfUtcDay(scheduleDateReference).getTime()) {
+    return res.status(400).json({
+      message: "La fecha de pago debe ser igual o mayor a la fecha de programación"
+    });
+  }
 
   if (paymentRequestIds.length === 0) {
     return res.status(400).json({ message: "Debe seleccionar al menos un boletín" });
@@ -1190,11 +1263,18 @@ app.post("/api/payment-schedules", authenticateToken, async (req: any, res) => {
 
     const selectedRequests = await prisma.paymentRequest.findMany({
       where: { id: { in: paymentRequestIds } },
-      select: { id: true }
+      select: { id: true, docNumber: true, date: true }
     });
 
     if (selectedRequests.length !== paymentRequestIds.length) {
       return res.status(400).json({ message: "Uno o más boletines no existen" });
+    }
+
+    const invalidBoletin = getFirstBoletinAfterCommitment(selectedRequests, commitmentDate);
+    if (invalidBoletin) {
+      return res.status(400).json({
+        message: `El boletín ${invalidBoletin.docNumber} tiene fecha mayor a la fecha del compromiso`
+      });
     }
 
     const count = await prisma.paymentSchedule.count();
@@ -1204,6 +1284,8 @@ app.post("/api/payment-schedules", authenticateToken, async (req: any, res) => {
       const created = await tx.paymentSchedule.create({
         data: {
           scheduleNumber,
+          commitmentDate,
+          paymentDate,
           notes,
           lines: {
             create: paymentRequestIds.map((paymentRequestId: number) => ({ paymentRequestId }))
@@ -1250,6 +1332,16 @@ app.put("/api/payment-schedules/:id", authenticateToken, async (req: any, res) =
     ? req.body.paymentRequestIds.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id))
     : [];
   const notes = typeof req.body?.notes === 'string' ? req.body.notes.trim() : null;
+  const commitmentDate = parseCommitmentDateInput(req.body?.commitmentDate);
+  const paymentDate = parsePaymentDateInput(req.body?.paymentDate);
+
+  if (!commitmentDate) {
+    return res.status(400).json({ message: "Debe indicar una fecha de compromiso válida" });
+  }
+
+  if (!paymentDate) {
+    return res.status(400).json({ message: "Debe indicar una fecha de pago válida" });
+  }
 
   try {
     const existingSchedule = await prisma.paymentSchedule.findUnique({
@@ -1271,17 +1363,30 @@ app.put("/api/payment-schedules/:id", authenticateToken, async (req: any, res) =
       return res.status(400).json({ message: "No se puede editar una programación enviada a finanzas" });
     }
 
+    if (paymentDate.getTime() < getStartOfUtcDay(new Date(existingSchedule.date)).getTime()) {
+      return res.status(400).json({
+        message: "La fecha de pago debe ser igual o mayor a la fecha de programación"
+      });
+    }
+
     if (paymentRequestIds.length > 0) {
       const selectedRequests = await prisma.paymentRequest.findMany({
         where: {
           id: { in: paymentRequestIds },
           status: { not: 'RECHAZADO' }
         },
-        select: { id: true }
+        select: { id: true, docNumber: true, date: true }
       });
 
       if (selectedRequests.length !== paymentRequestIds.length) {
         return res.status(400).json({ message: "Uno o más boletines no existen o están rechazados" });
+      }
+
+      const invalidBoletin = getFirstBoletinAfterCommitment(selectedRequests, commitmentDate);
+      if (invalidBoletin) {
+        return res.status(400).json({
+          message: `El boletín ${invalidBoletin.docNumber} tiene fecha mayor a la fecha del compromiso`
+        });
       }
 
       const conflictingLines = await prisma.paymentScheduleLine.findMany({
@@ -1324,6 +1429,8 @@ app.put("/api/payment-schedules/:id", authenticateToken, async (req: any, res) =
       const updated = await tx.paymentSchedule.update({
         where: { id: scheduleId },
         data: {
+          commitmentDate,
+          paymentDate,
           notes,
           status: shouldResetApproval ? 'PENDIENTE_APROBACION' : existingSchedule.status,
           approvedAt: shouldResetApproval ? null : existingSchedule.approvedAt,

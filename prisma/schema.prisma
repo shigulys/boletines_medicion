@@ -117,6 +117,8 @@ model PaymentSchedule {
   id               Int                   @id @default(autoincrement())
   scheduleNumber   String                @unique
   date             DateTime              @default(now())
+  commitmentDate   DateTime
+  paymentDate      DateTime
   status           String                @default("PENDIENTE_APROBACION") // PENDIENTE_APROBACION | APROBADA | ENVIADA_FINANZAS
   notes            String?
   approvedAt       DateTime?
