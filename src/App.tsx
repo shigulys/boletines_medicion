@@ -11,11 +11,12 @@ import { BoletinMedicion } from './components/BoletinMedicion'
 import { RetentionManagement } from './components/RetentionManagement'
 import { UnitOfMeasureManagement } from './components/UnitOfMeasureManagement'
 import { PaymentScheduling } from './components/PaymentScheduling'
+import { AdmCloudPayrollReport } from './components/AdmCloudPayrollReport'
 
 function App() {
   const { user, isLoading } = useAuth();
   const [view, setView] = useState<'login' | 'register'>('login');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'budget' | 'admcloud' | 'boletin' | 'paymentScheduling' | 'retentions' | 'units'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'budget' | 'admcloud' | 'boletin' | 'paymentScheduling' | 'retentions' | 'units' | 'payrollReport'>('dashboard');
   const [isEditingInNewTab, setIsEditingInNewTab] = useState(false);
   const [subcontractCount, setSubcontractCount] = useState<number>(0);
   const [loadingSubcontracts, setLoadingSubcontracts] = useState<boolean>(false);
@@ -331,6 +332,8 @@ function App() {
         return user?.role === 'admin' ? <RetentionWrapper /> : <div>No tiene permiso para acceder a esta sección.</div>;
       case 'units':
         return user?.role === 'admin' ? <UnitsWrapper /> : <div>No tiene permiso para acceder a esta sección.</div>;
+      case 'payrollReport':
+        return <PayrollReportWrapper />;
       default:
         return <div>Sección no encontrada.</div>;
     }
@@ -358,6 +361,7 @@ function App() {
               onSelectPaymentScheduling={() => setActiveTab('paymentScheduling')}
               onSelectRetentions={() => setActiveTab('retentions')}
               onSelectUnits={() => setActiveTab('units')}
+              onSelectPayrollReport={() => setActiveTab('payrollReport')}
             />
           )}
           <main className="main-content">
@@ -436,6 +440,16 @@ const UnitsWrapper = () => (
       <p>Administración de unidades para uso en boletines de medición</p>
     </header>
     <UnitOfMeasureManagement />
+  </>
+);
+
+const PayrollReportWrapper = () => (
+  <>
+    <header className="content-header">
+      <h1>Reporte de Nóminas AdmCloud</h1>
+      <p>Consulta columnar de nóminas generadas y su detalle de empleados</p>
+    </header>
+    <AdmCloudPayrollReport />
   </>
 );
 

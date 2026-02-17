@@ -1,3 +1,38 @@
+// Endpoint para obtener el nombre de la empresa por SubsidiaryID
+// Debe ir después de la declaración de 'app'
+app.get("/api/admcloud/subsidiaries/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const pool = await connectAdmCloud();
+    const result = await pool.request()
+      .input("subsidiaryId", id)
+      .query("SELECT ID, Name FROM SA_Subsidiaries WHERE ID = @subsidiaryId");
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ message: "Empresa no encontrada" });
+    }
+    const empresa = result.recordset[0];
+    res.json({ id: empresa.ID, name: empresa.Name });
+  } catch (error) {
+    res.status(500).json({ message: "Error al consultar empresa", error: error.message });
+  }
+});
+// Endpoint para obtener el nombre de la empresa por SubsidiaryID
+app.get("/api/admcloud/subsidiaries/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const pool = await connectAdmCloud();
+    const result = await pool.request()
+      .input("subsidiaryId", id)
+      .query("SELECT ID, Name FROM SA_Subsidiaries WHERE ID = @subsidiaryId");
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ message: "Empresa no encontrada" });
+    }
+    const empresa = result.recordset[0];
+    res.json({ id: empresa.ID, name: empresa.Name });
+  } catch (error) {
+    res.status(500).json({ message: "Error al consultar empresa", error: error.message });
+  }
+});
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -13,6 +48,23 @@ import { sendApprovalEmail, sendNewRequestEmailToAdmin } from "./mail";
 dotenv.config();
 
 const app = express();
+// Endpoint para obtener el nombre de la empresa por SubsidiaryID
+app.get("/api/admcloud/subsidiaries/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const pool = await connectAdmCloud();
+    const result = await pool.request()
+      .input("subsidiaryId", id)
+      .query("SELECT ID, Name FROM SA_Subsidiaries WHERE ID = @subsidiaryId");
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ message: "Empresa no encontrada" });
+    }
+    const empresa = result.recordset[0];
+    res.json({ id: empresa.ID, name: empresa.Name });
+  } catch (error) {
+    res.status(500).json({ message: "Error al consultar empresa", error: error.message });
+  }
+});
 const PORT = 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "default_secret";
 
@@ -718,7 +770,7 @@ app.get("/api/admcloud/transactions/:id/items", authenticateToken, async (req, r
       if (it.TaxAmount === 0 && it.TaxPercent > 0) {
         console.log(`⚠️ Item ${it.ItemID} tiene TaxPercent=${it.TaxPercent}% pero TaxAmount=0`);
       }
-      
+
       return item;
     });
     
@@ -727,6 +779,462 @@ app.get("/api/admcloud/transactions/:id/items", authenticateToken, async (req, r
   } catch (error) {
     console.error("Error fetching transaction items:", error);
     res.status(500).json({ message: "Error al consultar ítems de AdmCloud" });
+  }
+});
+
+// Payroll report from AdmCloud
+app.get("/api/admcloud/payrolls", authenticateToken, async (req, res) => {
+  try {
+    const pool = await connectAdmCloud();
+    const subsidiaryId = String(req.query.subsidiaryId || "FBC6AADF-8B12-47F7-AA18-08DDDFE6F02E");
+
+    const query = `
+      SELECT
+        [ID],
+        [SubsidiaryID],
+        [DocID],
+        [DocType],
+        [DocDate],
+        [DateTo],
+        [Reference],
+        [PaymentTypeID],
+        [Year],
+        [Month],
+        STUFF((
+          SELECT DISTINCT ', ' + bd.[Name]
+          FROM [dbo].[SA_Trans_Employees] e
+          LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON e.[BenefitDiscountID] = bd.[ID]
+          WHERE e.[TransID] = t.[ID]
+            AND bd.[Name] IS NOT NULL
+          FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') as ConceptSummary
+      FROM [dbo].[SA_Transactions] t
+      WHERE [DocType] = 'PAYROLL'
+        AND [SubsidiaryID] = @subsidiaryId
+      ORDER BY [Year] DESC, [Month] DESC, [DocDate] DESC
+    `;
+
+    const result = await pool.request()
+      .input("subsidiaryId", subsidiaryId)
+      .query(query);
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error("Error fetching AdmCloud payroll report:", error);
+    res.status(500).json({ message: "Error al consultar nóminas en AdmCloud" });
+  }
+});
+
+// Payroll detail (employees) from AdmCloud
+app.get("/api/admcloud/payrolls/:id/employees", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await connectAdmCloud();
+
+    const queryByTransId = `
+      SELECT
+        e.*,
+        r.[FullName] as EmployeeName
+      FROM [dbo].[SA_Trans_Employees] e
+      LEFT JOIN [dbo].[SA_Relationships] r ON r.[ID] = e.[EmployeeID]
+      WHERE e.[TransID] = @transId
+      ORDER BY r.[FullName] ASC, e.[BenefitDiscountID] ASC
+    `;
+
+    const byTransId = await pool.request()
+      .input("transId", id)
+      .query(queryByTransId);
+
+    if (byTransId.recordset.length > 0) {
+      return res.json(byTransId.recordset);
+    }
+
+    const queryByDocId = `
+      SELECT
+        e.*,
+        r.[FullName] as EmployeeName
+      FROM [dbo].[SA_Trans_Employees] e
+      INNER JOIN [dbo].[SA_Transactions] t ON e.[TransID] = t.[ID]
+      LEFT JOIN [dbo].[SA_Relationships] r ON r.[ID] = e.[EmployeeID]
+      WHERE t.[DocID] = @docId
+      ORDER BY r.[FullName] ASC, e.[BenefitDiscountID] ASC
+    `;
+
+    const byDocId = await pool.request()
+      .input("docId", id)
+      .query(queryByDocId);
+
+    res.json(byDocId.recordset);
+  } catch (error) {
+    console.error("Error fetching AdmCloud payroll detail:", error);
+    res.status(500).json({ message: "Error al consultar detalle de nómina en AdmCloud" });
+  }
+});
+
+// Payroll detail by document ID
+app.get("/api/admcloud/payrolls/by-doc/:docId/employees", authenticateToken, async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const pool = await connectAdmCloud();
+
+    const query = `
+      SELECT
+        e.*,
+        r.[FullName] as EmployeeName
+      FROM [dbo].[SA_Trans_Employees] e
+      INNER JOIN [dbo].[SA_Transactions] t ON e.[TransID] = t.[ID]
+      LEFT JOIN [dbo].[SA_Relationships] r ON r.[ID] = e.[EmployeeID]
+      WHERE t.[DocID] = @docId
+      ORDER BY r.[FullName] ASC, e.[BenefitDiscountID] ASC
+    `;
+
+    const result = await pool.request()
+      .input("docId", docId)
+      .query(query);
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error("Error fetching AdmCloud payroll detail:", error);
+    res.status(500).json({ message: "Error al consultar detalle de nómina en AdmCloud" });
+  }
+});
+
+// Payroll concepts (benefits/discounts) by transaction ID (fallback to DocID)
+app.get("/api/admcloud/payrolls/:id/benefits-discounts", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await connectAdmCloud();
+
+    const queryByTransId = `
+      SELECT
+        tx.[ID],
+        tx.[RowOrder],
+        tx.[TransID],
+        tx.[BenefitDiscountID],
+        bd.[Name] as BenefitDiscountName,
+        bd.[Code] as BenefitDiscountCode,
+        bd.[Type] as BenefitDiscountTypeID,
+        bdt.[Name] as BenefitDiscountType,
+        tx.[Amount],
+        tx.[Quantity],
+        tx.[FlatFeeAmount],
+        tx.[FeePercent],
+        tx.[BillablePercent],
+        tx.[Unit],
+        tx.[IncludeInPeriod1],
+        tx.[IncludeInPeriod2],
+        tx.[IncludeInPeriod3],
+        tx.[IncludeInPeriod4],
+        tx.[Notes]
+      FROM [dbo].[PR_Transactions_Benefits_Discounts] tx
+      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON tx.[BenefitDiscountID] = bd.[ID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bd.[Type] = bdt.[ID]
+      WHERE tx.[TransID] = @transId
+      ORDER BY tx.[RowOrder] ASC, bd.[Name] ASC
+    `;
+
+    const byTransId = await pool.request()
+      .input("transId", id)
+      .query(queryByTransId);
+
+    if (byTransId.recordset.length > 0) {
+      return res.json(byTransId.recordset);
+    }
+
+    const fallbackByTransId = `
+      SELECT
+        MIN(e.[ID]) as [ID],
+        e.[TransID],
+        e.[BenefitDiscountID],
+        bd.[Name] as BenefitDiscountName,
+        bd.[Code] as BenefitDiscountCode,
+        bd.[Type] as BenefitDiscountTypeID,
+        bdt.[Name] as BenefitDiscountType,
+        COUNT(1) as EmployeeLines,
+        SUM(ISNULL(e.[Amount], 0)) as Amount,
+        SUM(ISNULL(e.[Quantity], 0)) as Quantity,
+        SUM(ISNULL(e.[Total], 0)) as Total,
+        STUFF((
+          SELECT DISTINCT ',' + CAST(c.[ConceptID] AS VARCHAR(36))
+          FROM [dbo].[PR_Benefits_Discounts_Concepts] c
+          WHERE c.[BenefitDiscountID] = e.[BenefitDiscountID]
+          FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 1, '') as ConceptIDs,
+        COUNT(DISTINCT c2.[ConceptID]) as ConceptCount,
+        'SA_Trans_Employees' as DataSource
+      FROM [dbo].[SA_Trans_Employees] e
+      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON e.[BenefitDiscountID] = bd.[ID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bd.[Type] = bdt.[ID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts_Concepts] c2 ON e.[BenefitDiscountID] = c2.[BenefitDiscountID]
+      WHERE e.[TransID] = @transId
+      GROUP BY e.[TransID], e.[BenefitDiscountID], bd.[Name], bd.[Code], bd.[Type], bdt.[Name]
+      ORDER BY bd.[Name] ASC
+    `;
+
+    const fallbackRows = await pool.request()
+      .input("transId", id)
+      .query(fallbackByTransId);
+
+    if (fallbackRows.recordset.length > 0) {
+      return res.json(fallbackRows.recordset);
+    }
+
+    const queryByDocId = `
+      SELECT
+        tx.[ID],
+        tx.[RowOrder],
+        tx.[TransID],
+        tx.[BenefitDiscountID],
+        bd.[Name] as BenefitDiscountName,
+        bd.[Code] as BenefitDiscountCode,
+        bd.[Type] as BenefitDiscountTypeID,
+        bdt.[Name] as BenefitDiscountType,
+        tx.[Amount],
+        tx.[Quantity],
+        tx.[FlatFeeAmount],
+        tx.[FeePercent],
+        tx.[BillablePercent],
+        tx.[Unit],
+        tx.[IncludeInPeriod1],
+        tx.[IncludeInPeriod2],
+        tx.[IncludeInPeriod3],
+        tx.[IncludeInPeriod4],
+        tx.[Notes]
+      FROM [dbo].[PR_Transactions_Benefits_Discounts] tx
+      INNER JOIN [dbo].[SA_Transactions] t ON tx.[TransID] = t.[ID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON tx.[BenefitDiscountID] = bd.[ID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bd.[Type] = bdt.[ID]
+      WHERE t.[DocID] = @docId
+      ORDER BY tx.[RowOrder] ASC, bd.[Name] ASC
+    `;
+
+    const byDocId = await pool.request()
+      .input("docId", id)
+      .query(queryByDocId);
+
+    if (byDocId.recordset.length > 0) {
+      return res.json(byDocId.recordset);
+    }
+
+    const fallbackByDocId = `
+      SELECT
+        MIN(e.[ID]) as [ID],
+        e.[TransID],
+        e.[BenefitDiscountID],
+        bd.[Name] as BenefitDiscountName,
+        bd.[Code] as BenefitDiscountCode,
+        bd.[Type] as BenefitDiscountTypeID,
+        bdt.[Name] as BenefitDiscountType,
+        COUNT(1) as EmployeeLines,
+        SUM(ISNULL(e.[Amount], 0)) as Amount,
+        SUM(ISNULL(e.[Quantity], 0)) as Quantity,
+        SUM(ISNULL(e.[Total], 0)) as Total,
+        STUFF((
+          SELECT DISTINCT ',' + CAST(c.[ConceptID] AS VARCHAR(36))
+          FROM [dbo].[PR_Benefits_Discounts_Concepts] c
+          WHERE c.[BenefitDiscountID] = e.[BenefitDiscountID]
+          FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 1, '') as ConceptIDs,
+        COUNT(DISTINCT c2.[ConceptID]) as ConceptCount,
+        'SA_Trans_Employees' as DataSource
+      FROM [dbo].[SA_Trans_Employees] e
+      INNER JOIN [dbo].[SA_Transactions] t ON e.[TransID] = t.[ID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON e.[BenefitDiscountID] = bd.[ID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bd.[Type] = bdt.[ID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts_Concepts] c2 ON e.[BenefitDiscountID] = c2.[BenefitDiscountID]
+      WHERE t.[DocID] = @docId
+      GROUP BY e.[TransID], e.[BenefitDiscountID], bd.[Name], bd.[Code], bd.[Type], bdt.[Name]
+      ORDER BY bd.[Name] ASC
+    `;
+
+    const fallbackByDocRows = await pool.request()
+      .input("docId", id)
+      .query(fallbackByDocId);
+
+    res.json(fallbackByDocRows.recordset);
+  } catch (error) {
+    console.error("Error fetching AdmCloud payroll benefits/discounts:", error);
+    res.status(500).json({ message: "Error al consultar conceptos de pago y descuentos" });
+  }
+});
+
+// Payroll concepts (benefits/discounts) by DocID
+app.get("/api/admcloud/payrolls/by-doc/:docId/benefits-discounts", authenticateToken, async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const pool = await connectAdmCloud();
+
+    const query = `
+      SELECT
+        tx.[ID],
+        tx.[RowOrder],
+        tx.[TransID],
+        tx.[BenefitDiscountID],
+        bd.[Name] as BenefitDiscountName,
+        bd.[Code] as BenefitDiscountCode,
+        bd.[Type] as BenefitDiscountTypeID,
+        bdt.[Name] as BenefitDiscountType,
+        tx.[Amount],
+        tx.[Quantity],
+        tx.[FlatFeeAmount],
+        tx.[FeePercent],
+        tx.[BillablePercent],
+        tx.[Unit],
+        tx.[IncludeInPeriod1],
+        tx.[IncludeInPeriod2],
+        tx.[IncludeInPeriod3],
+        tx.[IncludeInPeriod4],
+        tx.[Notes]
+      FROM [dbo].[PR_Transactions_Benefits_Discounts] tx
+      INNER JOIN [dbo].[SA_Transactions] t ON tx.[TransID] = t.[ID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON tx.[BenefitDiscountID] = bd.[ID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bd.[Type] = bdt.[ID]
+      WHERE t.[DocID] = @docId
+      ORDER BY tx.[RowOrder] ASC, bd.[Name] ASC
+    `;
+
+    const result = await pool.request()
+      .input("docId", docId)
+      .query(query);
+
+    if (result.recordset.length > 0) {
+      return res.json(result.recordset);
+    }
+
+    const fallbackQuery = `
+      SELECT
+        MIN(e.[ID]) as [ID],
+        e.[TransID],
+        e.[BenefitDiscountID],
+        bd.[Name] as BenefitDiscountName,
+        bd.[Code] as BenefitDiscountCode,
+        bd.[Type] as BenefitDiscountTypeID,
+        bdt.[Name] as BenefitDiscountType,
+        COUNT(1) as EmployeeLines,
+        SUM(ISNULL(e.[Amount], 0)) as Amount,
+        SUM(ISNULL(e.[Quantity], 0)) as Quantity,
+        SUM(ISNULL(e.[Total], 0)) as Total,
+        STUFF((
+          SELECT DISTINCT ',' + CAST(c.[ConceptID] AS VARCHAR(36))
+          FROM [dbo].[PR_Benefits_Discounts_Concepts] c
+          WHERE c.[BenefitDiscountID] = e.[BenefitDiscountID]
+          FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 1, '') as ConceptIDs,
+        COUNT(DISTINCT c2.[ConceptID]) as ConceptCount,
+        'SA_Trans_Employees' as DataSource
+      FROM [dbo].[SA_Trans_Employees] e
+      INNER JOIN [dbo].[SA_Transactions] t ON e.[TransID] = t.[ID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON e.[BenefitDiscountID] = bd.[ID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bd.[Type] = bdt.[ID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts_Concepts] c2 ON e.[BenefitDiscountID] = c2.[BenefitDiscountID]
+      WHERE t.[DocID] = @docId
+      GROUP BY e.[TransID], e.[BenefitDiscountID], bd.[Name], bd.[Code], bd.[Type], bdt.[Name]
+      ORDER BY bd.[Name] ASC
+    `;
+
+    const fallbackResult = await pool.request()
+      .input("docId", docId)
+      .query(fallbackQuery);
+
+    res.json(fallbackResult.recordset);
+  } catch (error) {
+    console.error("Error fetching AdmCloud payroll benefits/discounts by doc:", error);
+    res.status(500).json({ message: "Error al consultar conceptos de pago y descuentos" });
+  }
+});
+
+// Payroll summary by employee (income/discount/net)
+app.get("/api/admcloud/payrolls/:id/employee-summary", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await connectAdmCloud();
+
+    const queryByTransId = `
+      SELECT
+        e.[EmployeeID],
+        r.[FullName] as EmployeeName,
+        COUNT(1) as Lines,
+        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) >= 0 THEN ISNULL(e.[Amount], 0) ELSE 0 END) as TotalIngresos,
+        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) < 0 THEN ISNULL(e.[Amount], 0) ELSE 0 END) as TotalDescuentos,
+        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) >= 0 THEN ISNULL(e.[Amount], 0) ELSE -ISNULL(e.[Amount], 0) END) as NetoEmpleado
+      FROM [dbo].[SA_Trans_Employees] e
+      LEFT JOIN [dbo].[SA_Relationships] r ON r.[ID] = e.[EmployeeID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON bd.[ID] = e.[BenefitDiscountID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bdt.[ID] = bd.[Type]
+      WHERE e.[TransID] = @transId
+      GROUP BY e.[EmployeeID], r.[FullName]
+      ORDER BY NetoEmpleado DESC
+    `;
+
+    const byTransId = await pool.request()
+      .input("transId", id)
+      .query(queryByTransId);
+
+    if (byTransId.recordset.length > 0) {
+      return res.json(byTransId.recordset);
+    }
+
+    const queryByDocId = `
+      SELECT
+        e.[EmployeeID],
+        r.[FullName] as EmployeeName,
+        COUNT(1) as Lines,
+        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) >= 0 THEN ISNULL(e.[Amount], 0) ELSE 0 END) as TotalIngresos,
+        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) < 0 THEN ISNULL(e.[Amount], 0) ELSE 0 END) as TotalDescuentos,
+        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) >= 0 THEN ISNULL(e.[Amount], 0) ELSE -ISNULL(e.[Amount], 0) END) as NetoEmpleado
+      FROM [dbo].[SA_Trans_Employees] e
+      INNER JOIN [dbo].[SA_Transactions] t ON e.[TransID] = t.[ID]
+      LEFT JOIN [dbo].[SA_Relationships] r ON r.[ID] = e.[EmployeeID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON bd.[ID] = e.[BenefitDiscountID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bdt.[ID] = bd.[Type]
+      WHERE t.[DocID] = @docId
+      GROUP BY e.[EmployeeID], r.[FullName]
+      ORDER BY NetoEmpleado DESC
+    `;
+
+    const byDocId = await pool.request()
+      .input("docId", id)
+      .query(queryByDocId);
+
+    res.json(byDocId.recordset);
+  } catch (error) {
+    console.error("Error fetching payroll employee summary:", error);
+    res.status(500).json({ message: "Error al consultar resumen por empleado" });
+  }
+});
+
+// Payroll summary by employee by DocID
+app.get("/api/admcloud/payrolls/by-doc/:docId/employee-summary", authenticateToken, async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const pool = await connectAdmCloud();
+
+    const query = `
+      SELECT
+        e.[EmployeeID],
+        r.[FullName] as EmployeeName,
+        COUNT(1) as Lines,
+        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) >= 0 THEN ISNULL(e.[Amount], 0) ELSE 0 END) as TotalIngresos,
+        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) < 0 THEN ISNULL(e.[Amount], 0) ELSE 0 END) as TotalDescuentos,
+        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) >= 0 THEN ISNULL(e.[Amount], 0) ELSE -ISNULL(e.[Amount], 0) END) as NetoEmpleado
+      FROM [dbo].[SA_Trans_Employees] e
+      INNER JOIN [dbo].[SA_Transactions] t ON e.[TransID] = t.[ID]
+      LEFT JOIN [dbo].[SA_Relationships] r ON r.[ID] = e.[EmployeeID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON bd.[ID] = e.[BenefitDiscountID]
+      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bdt.[ID] = bd.[Type]
+      WHERE t.[DocID] = @docId
+      GROUP BY e.[EmployeeID], r.[FullName]
+      ORDER BY NetoEmpleado DESC
+    `;
+
+    const result = await pool.request()
+      .input("docId", docId)
+      .query(query);
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error("Error fetching payroll employee summary by doc:", error);
+    res.status(500).json({ message: "Error al consultar resumen por empleado" });
   }
 });
 
