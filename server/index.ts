@@ -1,38 +1,4 @@
-// Endpoint para obtener el nombre de la empresa por SubsidiaryID
-// Debe ir después de la declaración de 'app'
-app.get("/api/admcloud/subsidiaries/:id", async (req, res) => {
-  const { id } = req.params;
-  try {
-    const pool = await connectAdmCloud();
-    const result = await pool.request()
-      .input("subsidiaryId", id)
-      .query("SELECT ID, Name FROM SA_Subsidiaries WHERE ID = @subsidiaryId");
-    if (result.recordset.length === 0) {
-      return res.status(404).json({ message: "Empresa no encontrada" });
-    }
-    const empresa = result.recordset[0];
-    res.json({ id: empresa.ID, name: empresa.Name });
-  } catch (error) {
-    res.status(500).json({ message: "Error al consultar empresa", error: error.message });
-  }
-});
-// Endpoint para obtener el nombre de la empresa por SubsidiaryID
-app.get("/api/admcloud/subsidiaries/:id", async (req, res) => {
-  const { id } = req.params;
-  try {
-    const pool = await connectAdmCloud();
-    const result = await pool.request()
-      .input("subsidiaryId", id)
-      .query("SELECT ID, Name FROM SA_Subsidiaries WHERE ID = @subsidiaryId");
-    if (result.recordset.length === 0) {
-      return res.status(404).json({ message: "Empresa no encontrada" });
-    }
-    const empresa = result.recordset[0];
-    res.json({ id: empresa.ID, name: empresa.Name });
-  } catch (error) {
-    res.status(500).json({ message: "Error al consultar empresa", error: error.message });
-  }
-});
+// ...existing code...
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -48,6 +14,23 @@ import { sendApprovalEmail, sendNewRequestEmailToAdmin } from "./mail";
 dotenv.config();
 
 const app = express();
+// Endpoint para obtener el nombre de la empresa por SubsidiaryID
+app.get("/api/admcloud/subsidiaries/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const pool = await connectAdmCloud();
+    const result = await pool.request()
+      .input("subsidiaryId", id)
+      .query("SELECT ID, Name FROM SA_Subsidiaries WHERE ID = @subsidiaryId");
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ message: "Empresa no encontrada" });
+    }
+    const empresa = result.recordset[0];
+    res.json({ id: empresa.ID, name: empresa.Name });
+  } catch (error) {
+    res.status(500).json({ message: "Error al consultar empresa", error: error.message });
+  }
+});
 // Endpoint para obtener el nombre de la empresa por SubsidiaryID
 app.get("/api/admcloud/subsidiaries/:id", async (req, res) => {
   const { id } = req.params;
