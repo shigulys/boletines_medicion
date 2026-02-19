@@ -12,11 +12,12 @@ import { RetentionManagement } from './components/RetentionManagement'
 import { UnitOfMeasureManagement } from './components/UnitOfMeasureManagement'
 import { PaymentScheduling } from './components/PaymentScheduling'
 import { AdmCloudPayrollReport } from './components/AdmCloudPayrollReport'
+import WarehouseAccess from './components/WarehouseAccess'
 
 function App() {
   const { user, isLoading } = useAuth();
   const [view, setView] = useState<'login' | 'register'>('login');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'budget' | 'admcloud' | 'boletin' | 'paymentScheduling' | 'retentions' | 'units' | 'payrollReport'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'budget' | 'admcloud' | 'boletin' | 'paymentScheduling' | 'retentions' | 'units' | 'payrollReport' | 'warehouseAccess'>('dashboard');
   const [isEditingInNewTab, setIsEditingInNewTab] = useState(false);
   const [subcontractCount, setSubcontractCount] = useState<number>(0);
   const [loadingSubcontracts, setLoadingSubcontracts] = useState<boolean>(false);
@@ -182,7 +183,7 @@ function App() {
               <h1>Panel General de Control</h1>
               <p>Estado actual de la obra y gestión de recursos</p>
             </header>
-            
+
             <section className="dashboard-grid">
               {user?.accessSubcontratos && (
                 <div className="dashboard-card">
@@ -190,150 +191,52 @@ function App() {
                     <div className="dashboard-card-icon">👷</div>
                     <h3>Subcontratos</h3>
                   </div>
-                  <div className="dashboard-card-metric">
-                    {loadingSubcontracts ? '...' : subcontractCount}
-                  </div>
-                  <div className="dashboard-card-label">
-                    Órdenes del Departamento de Subcontratos
-                  </div>
-                  <div className="dashboard-card-progress">
-                    <div className="progress-label">
-                      <span>Departamento Específico</span>
-                      <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>ID: 134A52D2</span>
-                    </div>
-                    <div className="progress-bar-container">
-                      <div className="progress-bar" style={{width: '100%', background: 'linear-gradient(90deg, #4CAF50 0%, #66BB6A 100%)'}}></div>
-                    </div>
-                  </div>
-                  <div className="dashboard-card-footer">
-                    <div className="footer-stat">
-                      <div className="footer-stat-value">{subcontractCount}</div>
-                      <div className="footer-stat-label">Total OC</div>
-                    </div>
-                    <div className="footer-stat">
-                      <div className="footer-stat-value">✓</div>
-                      <div className="footer-stat-label">Filtrado</div>
-                    </div>
-                    <div className="footer-stat">
-                      <div className="footer-stat-value">🔍</div>
-                      <div className="footer-stat-label">Específico</div>
-                    </div>
-                  </div>
+                  <div className="dashboard-card-metric">{loadingSubcontracts ? '...' : subcontractCount}</div>
+                  <div className="dashboard-card-label">Órdenes del Departamento de Subcontratos</div>
                 </div>
               )}
+
               {user?.accessContabilidad && (
                 <div className="dashboard-card">
                   <div className="dashboard-card-header">
                     <div className="dashboard-card-icon">📋</div>
                     <h3>Boletines</h3>
                   </div>
-                  <div className="dashboard-card-metric">
-                    {loadingBoletines ? '...' : boletinesCount}
-                  </div>
+                  <div className="dashboard-card-metric">{loadingBoletines ? '...' : boletinesCount}</div>
                   <div className="dashboard-card-label">Boletines Emitidos</div>
-                  <div className="dashboard-card-progress">
-                    <div className="progress-label">
-                      <span>Total de Documentos</span>
-                      <span>{boletinesCount > 0 ? '✓' : '-'}</span>
-                    </div>
-                    <div className="progress-bar-container">
-                      <div className="progress-bar" style={{width: boletinesCount > 0 ? '100%' : '0%', background: 'linear-gradient(90deg, #2196F3 0%, #42A5F5 100%)'}}></div>
-                    </div>
-                  </div>
-                  <div className="dashboard-card-footer">
-                    <div className="footer-stat">
-                      <div className="footer-stat-value">{loadingBoletines ? '...' : boletinesCount}</div>
-                      <div className="footer-stat-label">Total</div>
-                    </div>
-                    <div className="footer-stat" style={{ borderLeft: '1px solid #e0e0e0', borderRight: '1px solid #e0e0e0' }}>
-                      <div className="footer-stat-value" style={{ color: '#ff9800' }}>{loadingBoletines ? '...' : boletinesPendientes}</div>
-                      <div className="footer-stat-label">Pendientes</div>
-                    </div>
-                    <div className="footer-stat">
-                      <div className="footer-stat-value" style={{ color: '#f44336' }}>{loadingBoletines ? '...' : boletinesRechazados}</div>
-                      <div className="footer-stat-label">Rechazados</div>
-                    </div>
-                  </div>
                 </div>
               )}
-              {user?.accessContabilidad && (
-                <div className="dashboard-card">
-                  <div className="dashboard-card-header">
-                    <div className="dashboard-card-icon">💰</div>
-                    <h3>Contabilidad</h3>
-                  </div>
-                  <div className="dashboard-card-metric">45%</div>
-                  <div className="dashboard-card-label">Presupuesto ejecutado</div>
-                  <div className="dashboard-card-progress">
-                    <div className="progress-label">
-                      <span>$5.2M de $11.5M</span>
-                      <span>45%</span>
-                    </div>
-                    <div className="progress-bar-container">
-                      <div className="progress-bar" style={{width: '45%'}}></div>
-                    </div>
-                  </div>
-                  <div className="dashboard-card-footer">
-                    <div className="footer-stat">
-                      <div className="footer-stat-value">156</div>
-                      <div className="footer-stat-label">Facturas</div>
-                    </div>
-                    <div className="footer-stat">
-                      <div className="footer-stat-value">$1.2M</div>
-                      <div className="footer-stat-label">Por Pagar</div>
-                    </div>
-                    <div className="footer-stat">
-                      <div className="footer-stat-value">12</div>
-                      <div className="footer-stat-label">Pendientes</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </section>
-
-            <section className="dashboard-bottom-summary">
-              <div className="quick-info-header">
-                <span>📊 Resumen Rápido</span>
-              </div>
-              <div className="quick-stats dashboard-quick-stats">
-                <div className="quick-stat-item">
-                  <div className="stat-value">{loadingSummary ? '...' : ordersCount}</div>
-                  <div className="stat-label">Órdenes Generadas</div>
-                </div>
-                <div className="quick-stat-item">
-                  <div className="stat-value">{loadingSummary ? '...' : `$${formatMoney(ordersAmountDop)}`}</div>
-                  <div className="stat-label">Total DOP</div>
-                  <div className="stat-label" style={{ marginTop: '2px', fontSize: '0.7rem', opacity: 0.8 }}>
-                    {loadingSummary ? '...' : `${ordersCountDop} órdenes`}
-                  </div>
-                </div>
-                <div className="quick-stat-item">
-                  <div className="stat-value">{loadingSummary ? '...' : `$${formatMoney(ordersAmountUsd)}`}</div>
-                  <div className="stat-label">Total USD</div>
-                  <div className="stat-label" style={{ marginTop: '2px', fontSize: '0.7rem', opacity: 0.8 }}>
-                    {loadingSummary ? '...' : `${ordersCountUsd} órdenes`}
-                  </div>
-                </div>
-              </div>
             </section>
           </>
         );
+
       case 'users':
         return user?.role === 'admin' ? <UserPermissionsWrapper /> : <div>No tiene permiso para acceder a esta sección.</div>;
+
       case 'budget':
         return <BudgetWrapper />;
+
       case 'admcloud':
         return <AdmCloudWrapper />;
+
       case 'boletin':
         return <BoletinWrapper />;
+
       case 'paymentScheduling':
         return <PaymentSchedulingWrapper />;
+
       case 'retentions':
         return user?.role === 'admin' ? <RetentionWrapper /> : <div>No tiene permiso para acceder a esta sección.</div>;
+
       case 'units':
         return user?.role === 'admin' ? <UnitsWrapper /> : <div>No tiene permiso para acceder a esta sección.</div>;
+
       case 'payrollReport':
         return <PayrollReportWrapper />;
+
+      case 'warehouseAccess':
+        return user?.role === 'admin' ? <WarehouseAccess /> : <div>No tiene permiso para acceder a esta sección.</div>;
+
       default:
         return <div>Sección no encontrada.</div>;
     }
@@ -341,37 +244,33 @@ function App() {
 
   return (
     <div className="App">
-      {!user ? (
-        <div className="auth-wrapper">
-          {view === 'login' ? (
-            <LoginForm onToggle={() => setView('register')} />
-          ) : (
-            <RegisterForm onToggle={() => setView('login')} />
-          )}
-        </div>
+      {user ? (
+        <>
+          <Sidebar
+            onSelectManagement={() => setActiveTab('users')}
+            onSelectDashboard={() => setActiveTab('dashboard')}
+            onSelectBudget={() => setActiveTab('budget')}
+            onSelectAdmCloud={() => setActiveTab('admcloud')}
+            onSelectBoletin={() => setActiveTab('boletin')}
+            onSelectPaymentScheduling={() => setActiveTab('paymentScheduling')}
+            onSelectRetentions={() => setActiveTab('retentions')}
+            onSelectUnits={() => setActiveTab('units')}
+            onSelectPayrollReport={() => setActiveTab('payrollReport')}
+            onSelectWarehouseAccess={() => setActiveTab('warehouseAccess')}
+          />
+          <main className="main-content">{renderContent()}</main>
+        </>
       ) : (
-        <div className={`app-layout ${isEditingInNewTab ? 'no-sidebar' : ''}`}>
-          {!isEditingInNewTab && (
-            <Sidebar 
-              onSelectManagement={() => setActiveTab('users')} 
-              onSelectDashboard={() => setActiveTab('dashboard')} 
-              onSelectBudget={() => setActiveTab('budget')}
-              onSelectAdmCloud={() => setActiveTab('admcloud')}
-              onSelectBoletin={() => setActiveTab('boletin')}
-              onSelectPaymentScheduling={() => setActiveTab('paymentScheduling')}
-              onSelectRetentions={() => setActiveTab('retentions')}
-              onSelectUnits={() => setActiveTab('units')}
-              onSelectPayrollReport={() => setActiveTab('payrollReport')}
-            />
+        <div className="auth-container">
+          {view === 'login' ? (
+            <LoginForm onSwitch={() => setView('register')} />
+          ) : (
+            <RegisterForm onSwitch={() => setView('login')} />
           )}
-          <main className="main-content">
-            {renderContent()}
-          </main>
         </div>
       )}
     </div>
-  )
-}
+  );
 
 const UserPermissionsWrapper = () => (
   <>
@@ -452,5 +351,6 @@ const PayrollReportWrapper = () => (
     <AdmCloudPayrollReport />
   </>
 );
+
 
 export default App

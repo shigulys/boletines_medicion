@@ -1,3 +1,4 @@
+
 // ...existing code...
 import express from "express";
 import cors from "cors";
@@ -593,6 +594,42 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
     res.status(500).json({ message: "Error al consultar AdmCloud" });
   }
 });
+
+    // Endpoint para asignar acceso a almacenes (AdmCloud)
+    app.post("/api/admcloud/warehouse-access", authenticateToken, async (req, res) => {
+      const { Users } = req.body;
+      if (!Array.isArray(Users) || Users.length === 0) {
+        return res.status(400).json({ message: "Debe enviar un array 'Users' con al menos un usuario." });
+      }
+      try {
+        const pool = await connectAdmCloud();
+        for (const user of Users) {
+          if (!user.ID || !user.LocationID || !user.RelationshipID || !user.RelationshipName) {
+            return res.status(400).json({ message: "Faltan campos requeridos en uno de los usuarios." });
+          }
+
+          await pool.request()
+            .input("UserID", user.ID)
+            .input("LocationID", user.LocationID)
+            .input("RelationshipID", user.RelationshipID)
+            .input("RelationshipName", user.RelationshipName)
+            .query(`
+              MERGE INTO SA_UserWarehouseAccess AS target
+              USING (SELECT @UserID AS UserID, @LocationID AS LocationID) AS source
+              ON (target.UserID = source.UserID AND target.LocationID = source.LocationID)
+              WHEN MATCHED THEN
+                UPDATE SET RelationshipID = @RelationshipID, RelationshipName = @RelationshipName
+              WHEN NOT MATCHED THEN
+                INSERT (UserID, LocationID, RelationshipID, RelationshipName)
+                VALUES (@UserID, @LocationID, @RelationshipID, @RelationshipName);
+            `);
+        }
+        res.json({ message: "Accesos a almacenes actualizados correctamente." });
+      } catch (error: any) {
+        console.error("Error al asignar acceso a almacenes:", error);
+        res.status(500).json({ message: "Error al asignar acceso a almacenes", detail: error.message });
+      }
+    });
 
 // Get single Transaction by ID
 app.get("/api/admcloud/transactions/:id", authenticateToken, async (req, res) => {

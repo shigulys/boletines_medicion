@@ -123,6 +123,7 @@ export const Sidebar: React.FC<{
                     <li onClick={onSelectManagement} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>👥</span>Usuarios y Permisos</li>
                     <li onClick={onSelectRetentions} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>📊</span>Catálogo de Retenciones</li>
                     <li onClick={onSelectUnits} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>📐</span>Unidades de Medida</li>
+                    <li onClick={props.onSelectWarehouseAccess} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>🏬</span>Acceso Almacenes</li>
                   </ul>
                 </AccordionItem>
               </div>
