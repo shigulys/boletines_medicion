@@ -389,15 +389,27 @@ a:hover {
   overflow-x: hidden;
 }
 
-.auth-wrapper {
+
+.auth-wrapper, .auth-container {
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 100%;
+  width: 100vw;
+  height: 100vh;
   min-height: 100vh;
   background-color: #f0f2f5;
   margin: 0;
   padding: 0;
+}
+
+.auth-container {
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  background: white;
+  border-radius: 12px;
+  max-width: 450px;
+  width: 100%;
+  padding: 40px;
 }
 
 .auth-container {
