@@ -58,7 +58,10 @@ console.log("-----------------------------------------");
 console.log("INICIANDO SERVIDOR SISTEMA DE OBRA v1.5");
 console.log("-----------------------------------------");
 
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true
+}));
 app.use(express.json());
 
 const normalizePrismaDecimals = (value: unknown): unknown => {

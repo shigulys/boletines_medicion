@@ -67,7 +67,7 @@ export const Sidebar: React.FC<{
           </div>
         ) : (
           <>
-            {user?.accessIngenieria && (
+            {user && (
               <AccordionItem 
                 title={<><span style={{ fontSize: '1.2rem' }}>📏</span> INGENIERÍA</>} 
                 isOpen={openSection === 'Ingeniería'} 
@@ -81,7 +81,7 @@ export const Sidebar: React.FC<{
               </AccordionItem>
             )}
 
-            {user?.accessSubcontratos && (
+            {user && (
               <AccordionItem 
                 title={<><span style={{ fontSize: '1.2rem' }}>👷</span> SUBCONTRATOS</>} 
                 isOpen={openSection === 'Subcontratos'} 
@@ -95,7 +95,7 @@ export const Sidebar: React.FC<{
               </AccordionItem>
             )}
 
-            {user?.accessContabilidad && (
+            {user && (
               <AccordionItem 
                 title={<><span style={{ fontSize: '1.2rem' }}>💰</span> CONTABILIDAD</>} 
                 isOpen={openSection === 'Contabilidad'} 
