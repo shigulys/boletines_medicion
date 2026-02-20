@@ -94,7 +94,7 @@ export const BoletinMedicion: React.FC = () => {
   const [linesToPay, setLinesToPay] = useState<any[]>([]);
   const [retentionPercent, setRetentionPercent] = useState(0);
   const [advancePercent, setAdvancePercent] = useState(0);
-  const [isrPercent, setIsrPercent] = useState(0); // Nueva: Retención ISR
+  // Eliminada Retención ISR
   const [measurementStartDate, setMeasurementStartDate] = useState<string | null>(null);
   const [measurementEndDate, setMeasurementEndDate] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -477,7 +477,7 @@ export const BoletinMedicion: React.FC = () => {
     setEditingId(boletin.id);
     setRetentionPercent(boletin.retentionPercent);
     setAdvancePercent(boletin.advancePercent);
-    setIsrPercent(boletin.isrPercent);
+    // Eliminada Retención ISR
     setMeasurementStartDate(boletin.measurementStartDate || null);
     setMeasurementEndDate(boletin.measurementEndDate || null);
     setHasUnsavedChanges(false); // Cargando datos guardados
@@ -633,7 +633,7 @@ export const BoletinMedicion: React.FC = () => {
 
     const retAmount = subTotal * (retentionPercent / 100);
     const advAmount = subTotal * (advancePercent / 100);
-    const isrAmount = subTotal * (isrPercent / 100);
+    const isrAmount = 0; // Eliminada Retención ISR
     const net = (subTotal + totalTax) - totalRetentionByLine - totalItbisRetention - retAmount - advAmount - isrAmount;
 
     return { subTotal, totalTax, retAmount, advAmount, isrAmount, totalRetentionByLine, totalItbisRetention, net };
@@ -740,7 +740,7 @@ export const BoletinMedicion: React.FC = () => {
           measurementEndDate: selectedTx.MeasurementEndDate,
           retentionPercent,
           advancePercent,
-          isrPercent,
+          // Eliminada Retención ISR
           receptionNumbers,
           lines: linesPayload
         })
@@ -1403,9 +1403,7 @@ export const BoletinMedicion: React.FC = () => {
     }
 
     if (boletin.isrAmount > 0) {
-      doc.text(`Retención ISR (${boletin.isrPercent}%):`, labelX, currentY);
-      doc.text(`-$${formatCurrency(boletin.isrAmount)}`, valueX, currentY, { align: 'right' });
-      currentY += 6;
+      // Eliminada Retención ISR
     }
     
     // Total Deducciones
@@ -2433,8 +2431,7 @@ export const BoletinMedicion: React.FC = () => {
                   )}
                   {totals.isrAmount > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.85rem', paddingLeft: '10px' }}>
-                      <span>ISR ({isrPercent}%)</span>
-                      <span style={{ color: '#d32f2f', fontWeight: '600' }}>-${formatCurrency(totals.isrAmount)}</span>
+                      {/* Eliminada Retención ISR */}
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #ffb74d' }}>
@@ -2478,7 +2475,7 @@ export const BoletinMedicion: React.FC = () => {
                     lines: linesToPay.filter(l=>l.selected),
                     retentionPercent,
                     advancePercent,
-                    isrPercent,
+                    // Eliminada Retención ISR
                     status: editingId ? savedBoletines.find(b=>b.id===editingId)?.status : 'PENDIENTE',
                     rejectionReason: editingId ? savedBoletines.find(b=>b.id===editingId)?.rejectionReason : null,
                     // Agregar totales calculados

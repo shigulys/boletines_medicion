@@ -56,27 +56,22 @@ function App() {
     }
   }, []);
 
-  // Cargar conteo de subcontratos del departamento específico
   useEffect(() => {
     const fetchSubcontractCount = async () => {
       if (!user?.accessSubcontratos) return;
-      
       setLoadingSubcontracts(true);
       try {
         const token = localStorage.getItem('token');
         const url = new URL('http://localhost:5000/api/admcloud/transactions');
         url.searchParams.append('departmentFilter', 'subcontratos');
-        
         const response = await fetch(url.toString(), {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         });
-        
         if (response.ok) {
           const data = await response.json();
           setSubcontractCount(data.length);
-          console.log(`✅ Subcontratos cargados: ${data.length} órdenes del departamento 134A52D2-1FF9-4BB1-564D-08DE34362E70`);
         }
       } catch (error) {
         console.error('Error cargando conteo de subcontratos:', error);
@@ -84,15 +79,12 @@ function App() {
         setLoadingSubcontracts(false);
       }
     };
-
     fetchSubcontractCount();
   }, [user?.accessSubcontratos]);
 
-  // Cargar conteo total de boletines emitidos
   useEffect(() => {
     const fetchBoletinesCount = async () => {
       if (!user?.accessContabilidad) return;
-      
       setLoadingBoletines(true);
       try {
         const token = localStorage.getItem('token');
@@ -101,15 +93,11 @@ function App() {
             'Authorization': `Bearer ${token}`
           }
         });
-        
         if (response.ok) {
           const data = await response.json();
           setBoletinesCount(data.length);
-          
-          // Contar por estado
           const pendientes = data.filter((b: any) => b.status === 'PENDIENTE').length;
           const rechazados = data.filter((b: any) => b.status === 'RECHAZADO').length;
-          
           setBoletinesPendientes(pendientes);
           setBoletinesRechazados(rechazados);
         }
@@ -119,14 +107,12 @@ function App() {
         setLoadingBoletines(false);
       }
     };
-
     fetchBoletinesCount();
   }, [user?.accessContabilidad]);
 
   useEffect(() => {
     const fetchOrdersSummary = async () => {
       if (!user?.accessContabilidad && !user?.accessSubcontratos && !user?.accessIngenieria) return;
-
       setLoadingSummary(true);
       try {
         const response = await fetch('http://localhost:5000/api/admcloud/transactions', {
@@ -134,7 +120,6 @@ function App() {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
-
         if (response.ok) {
           const data = await response.json();
           const summary = data.reduce((acc: { count: number; dop: number; usd: number; countDop: number; countUsd: number }, tx: { TotalAmount: number; Currency?: string }) => {
@@ -150,7 +135,6 @@ function App() {
             }
             return acc;
           }, { count: 0, dop: 0, usd: 0, countDop: 0, countUsd: 0 });
-
           setOrdersCount(summary.count);
           setOrdersAmountDop(summary.dop);
           setOrdersAmountUsd(summary.usd);
@@ -163,16 +147,18 @@ function App() {
         setLoadingSummary(false);
       }
     };
-
     fetchOrdersSummary();
   }, [user?.accessContabilidad, user?.accessSubcontratos, user?.accessIngenieria]);
+
+
+  // Todos los hooks deben ir antes de cualquier return
+  useEffect(() => {
+    if (user) console.log('Usuario actual en App:', user);
+  }, [user]);
 
   if (isLoading) {
     return <div className="loading-screen">Cargando Sistema de Obra...</div>;
   }
-
-  // Debug: Ver estado del usuario en consola
-  if (user) console.log('Usuario actual en App:', user);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -183,7 +169,6 @@ function App() {
               <h1>Panel General de Control</h1>
               <p>Estado actual de la obra y gestión de recursos</p>
             </header>
-
             <section className="dashboard-grid">
               {user?.accessSubcontratos && (
                 <div className="dashboard-card">
@@ -271,6 +256,7 @@ function App() {
       )}
     </div>
   );
+}
 
 const UserPermissionsWrapper = () => (
   <>
