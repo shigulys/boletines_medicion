@@ -9,13 +9,11 @@ interface Transaction {
   DocID: string;
   DocType: string;
   DocDate: string;
-  Date?: string;
   Reference: string | null;
   Status: number;
   VendorName?: string;
   VendorFiscalID?: string;
   ProjectName?: string;
-  JobNumber?: string;
   MeasurementStartDate?: string;
   MeasurementEndDate?: string;
   TotalAmount: number;
@@ -82,13 +80,6 @@ export const BoletinMedicion: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-
-  // Función para limpiar filtros
-  const clearFilters = () => {
-    setSearchTerm('');
-    setStartDate('');
-    setEndDate('');
-  };
   const [filterSubcontratos, setFilterSubcontratos] = useState(false);
 
   // Filtros de historial
@@ -101,7 +92,7 @@ export const BoletinMedicion: React.FC = () => {
   const [linesToPay, setLinesToPay] = useState<any[]>([]);
   const [retentionPercent, setRetentionPercent] = useState(0);
   const [advancePercent, setAdvancePercent] = useState(0);
-  // Eliminada Retención ISR
+  const [isrPercent, setIsrPercent] = useState(0); // Nueva: Retención ISR
   const [measurementStartDate, setMeasurementStartDate] = useState<string | null>(null);
   const [measurementEndDate, setMeasurementEndDate] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -472,19 +463,10 @@ export const BoletinMedicion: React.FC = () => {
   };
 
   const handleEditBoletin = async (boletin: any) => {
-    const scheduledLine = boletin.paymentScheduleLines?.find(
-      (line: { paymentSchedule?: { status?: string; scheduleNumber?: string } }) =>
-        line?.paymentSchedule?.status !== 'CANCELADA'
-    );
-    if (scheduledLine) {
-      alert(`Este boletín no se puede editar porque está incluido en la programación ${scheduledLine.paymentSchedule?.scheduleNumber || ''}`);
-      return;
-    }
-
     setEditingId(boletin.id);
     setRetentionPercent(boletin.retentionPercent);
     setAdvancePercent(boletin.advancePercent);
-    // Eliminada Retención ISR
+    setIsrPercent(boletin.isrPercent);
     setMeasurementStartDate(boletin.measurementStartDate || null);
     setMeasurementEndDate(boletin.measurementEndDate || null);
     setHasUnsavedChanges(false); // Cargando datos guardados
@@ -640,7 +622,7 @@ export const BoletinMedicion: React.FC = () => {
 
     const retAmount = subTotal * (retentionPercent / 100);
     const advAmount = subTotal * (advancePercent / 100);
-    const isrAmount = 0; // Eliminada Retención ISR
+    const isrAmount = subTotal * (isrPercent / 100);
     const net = (subTotal + totalTax) - totalRetentionByLine - totalItbisRetention - retAmount - advAmount - isrAmount;
 
     return { subTotal, totalTax, retAmount, advAmount, isrAmount, totalRetentionByLine, totalItbisRetention, net };
@@ -656,6 +638,7 @@ export const BoletinMedicion: React.FC = () => {
       const key = `${line.retentionPercent}`;
       
       const st = line.quantity * line.unitPrice;
+      const tax = st * (line.taxPercent / 100);
       const retentionAmount = st * (line.retentionPercent / 100);
       
       if (!summary[key]) {
@@ -747,7 +730,7 @@ export const BoletinMedicion: React.FC = () => {
           measurementEndDate: selectedTx.MeasurementEndDate,
           retentionPercent,
           advancePercent,
-          // Eliminada Retención ISR
+          isrPercent,
           receptionNumbers,
           lines: linesPayload
         })
@@ -979,7 +962,9 @@ export const BoletinMedicion: React.FC = () => {
       const itemsData: any[] = [];
       
       // Procesar por transacción para agregar subtotales
-      itemsByTransaction.forEach((items) => {
+      itemsByTransaction.forEach((items, transactionId) => {
+        let totalOrdenadoOC = 0;
+        let totalRecibidoOC = 0;
         
         // Agregar items de esta transacción
         items.forEach(({ transaction, item }) => {
@@ -1110,6 +1095,10 @@ export const BoletinMedicion: React.FC = () => {
                    currencyValue === 'F5825D92-D608-4B7B-ADCD-08DDAA50AC6E') {
             moneda = 'DOP';
           }
+          
+          // Acumular totales de la OC
+          totalOrdenadoOC += totalOrdenado;
+          totalRecibidoOC += totalRecibido;
           
           // Agregar item al detalle
           itemsData.push({
@@ -1270,7 +1259,7 @@ export const BoletinMedicion: React.FC = () => {
     }
 
     const tableColumn = ["Descripción", "Unidad", "Recepción", "Cantidad", "Precio Unit.", "ITBIS", "Retención", "Total"];
-    const tableRows = (boletin.lines || []).map((l: any) => {
+    const tableRows = (boletin.lines || []).map((l: any, idx: number) => {
       const subtotal = l.quantity * l.unitPrice;
       const tax = subtotal * ((l.taxPercent || 0) / 100);
       const retention = subtotal * ((l.retentionPercent || 0) / 100);
@@ -1410,7 +1399,9 @@ export const BoletinMedicion: React.FC = () => {
     }
 
     if (boletin.isrAmount > 0) {
-      // Eliminada Retención ISR
+      doc.text(`Retención ISR (${boletin.isrPercent}%):`, labelX, currentY);
+      doc.text(`-$${formatCurrency(boletin.isrAmount)}`, valueX, currentY, { align: 'right' });
+      currentY += 6;
     }
     
     // Total Deducciones
@@ -1447,13 +1438,6 @@ export const BoletinMedicion: React.FC = () => {
 
   const totals = calculateTotals();
 
-  const getScheduledInfo = (boletin: { paymentScheduleLines?: Array<{ paymentSchedule?: { status?: string; scheduleNumber?: string } }> }) => {
-    const scheduledLine = boletin.paymentScheduleLines?.find(
-      (line) => line?.paymentSchedule?.status !== 'CANCELADA'
-    );
-    return scheduledLine?.paymentSchedule || null;
-  };
-
   // Filtrar y Agrupar transacciones por proyecto
   const filteredTxs = transactions.filter(tx => {
     const matchesSearch = tx.DocID.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1477,8 +1461,6 @@ export const BoletinMedicion: React.FC = () => {
     return acc;
   }, {} as Record<string, Transaction[]>);
 
-  // ...existing code...
-  // RESTAURACIÓN DEL RETURN PRINCIPAL
   return (
     <div className="boletin-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '10px 0' }}>
@@ -1486,55 +1468,102 @@ export const BoletinMedicion: React.FC = () => {
           <h2 style={{ margin: 0, fontSize: '2rem', fontWeight: '700', color: '#1976d2' }}>Boletín de Medición y Solicitud de Pago</h2>
           <p style={{ margin: '5px 0 0 0', color: '#666', fontSize: '0.95rem' }}>Gestión de cubicaciones y solicitudes de pago</p>
         </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button
-            onClick={clearFilters}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#6c757d',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontWeight: 600,
-              fontSize: '0.95rem',
-              cursor: 'pointer',
-              marginLeft: '10px'
-            }}
-            title="Limpiar filtros de búsqueda y fechas"
-          >
-            Limpiar filtros
+        {!isNewTab && (
+          <button className="btn-small" onClick={() => setViewHistory(!viewHistory)}>
+            {viewHistory ? 'Volver al Formulario' : 'Ver Historial de Boletines'}
           </button>
-          {!isNewTab && (
-            <button className="btn-small" onClick={() => setViewHistory(!viewHistory)}>
-              {viewHistory ? 'Volver al Formulario' : 'Ver Historial de Boletines'}
-            </button>
-          )}
-        </div>
+        )}
       </div>
-      {/* Historial de boletines */}
+
       {viewHistory && !isNewTab ? (
         <div className="card history-card">
-          {/* Historial de boletines */}
-          <h3>Historial de Boletines Generados</h3>
-          {/* Aquí puedes agregar la tabla y filtros del historial */}
-        </div>
-      ) : !selectedTx ? (
-        <div className="card">
-          {/* Listado de órdenes de compra y filtros */}
-          <h3>Seleccione una Orden de Compra</h3>
-          {/* Aquí puedes agregar la tabla y filtros de órdenes */}
-        </div>
-      ) : (
-        <div className="boletin-form">
-          {/* Formulario de generación/edición de boletines */}
-          <h3>Generar o Editar Boletín</h3>
-          {/* Aquí puedes agregar el formulario completo */}
-        </div>
-      )}
-      {/* Aquí puedes agregar el bloque <style> si es necesario */}
-    </div>
-  );
-}
+          <div style={{ marginBottom: '25px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0, fontSize: '1.8rem', color: '#1976d2' }}>Historial de Boletines Generados</h2>
+              <button 
+                onClick={() => fetchBoletinHistory()} 
+                style={{ 
+                  padding: '8px 16px', 
+                  backgroundColor: '#2196F3', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '4px', 
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: '500'
+                }}
+              >
+                🔄 Recargar
+              </button>
+            </div>
+
+            {/* Filtros y Búsqueda */}
+            <div style={{ backgroundColor: '#f5f5f5', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '15px', alignItems: 'end' }}>
+                {/* Buscador */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600', color: '#555', fontSize: '0.9rem' }}>🔍 Buscar</label>
+                  <input
+                    type="text"
+                    placeholder="Proyecto, Proveedor, N° Boletín..."
+                    value={searchHistory}
+                    onChange={(e) => setSearchHistory(e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '0.9rem' }}
+                  />
+                </div>
+
+                {/* Filtro por Estado */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600', color: '#555', fontSize: '0.9rem' }}>📊 Estado</label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '0.9rem', cursor: 'pointer' }}
+                  >
+                    <option value="TODOS">Todos</option>
+                    <option value="PENDIENTE">Pendientes ({savedBoletines.filter(b => b.status === 'PENDIENTE').length})</option>
+                    <option value="APROBADO">Aprobados ({savedBoletines.filter(b => b.status === 'APROBADO').length})</option>
+                    <option value="RECHAZADO">Rechazados ({savedBoletines.filter(b => b.status === 'RECHAZADO').length})</option>
+                  </select>
+                </div>
+
+                {/* Agrupar por Proyecto */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600', color: '#555', fontSize: '0.9rem' }}>📁 Vista</label>
+                  <button
+                    onClick={() => setGroupByProject(!groupByProject)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #ddd',
+                      backgroundColor: groupByProject ? '#1976d2' : 'white',
+                      color: groupByProject ? 'white' : '#333',
+                      fontSize: '0.9rem',
+                      cursor: 'pointer',
+                      fontWeight: '500'
+                    }}
+                  >
+                    {groupByProject ? '📂 Por Proyecto' : '📄 Lista Completa'}
+                  </button>
+                </div>
+
+                {/* Estadísticas */}
+                <div style={{ display: 'flex', gap: '15px', padding: '8px 15px', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #ddd' }}>
+                  <span style={{ fontSize: '0.85rem', color: '#666' }}>
+                    Total: <strong style={{ color: '#1976d2' }}>{savedBoletines.filter(b => statusFilter === 'TODOS' || b.status === statusFilter).length}</strong>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          {savedBoletines.length === 0 ? (
+            <div style={{ 
+              padding: '40px', 
+              textAlign: 'center', 
+              color: '#999',
+              backgroundColor: '#f9f9f9',
+              borderRadius: '8px',
               fontSize: '1.1rem'
             }}>
               <p style={{ fontSize: '3rem', margin: '0 0 15px 0' }}>📋</p>
@@ -1668,9 +1697,7 @@ export const BoletinMedicion: React.FC = () => {
                                 </tr>
                               </thead>
                               <tbody>
-                                {projectBoletines.map(b => {
-                  const scheduledInfo = getScheduledInfo(b);
-                  return (
+                                {projectBoletines.map(b => (
                   <tr key={b.id}>
                     <td><strong style={{ fontSize: '1rem', color: '#1976d2' }}>{b.docNumber}</strong></td>
                     <td style={{ whiteSpace: 'nowrap', fontSize: '0.95rem' }}>{new Date(b.date).toLocaleDateString('es-ES')}</td>
@@ -1700,13 +1727,6 @@ export const BoletinMedicion: React.FC = () => {
                       <span className={`status-badge-large status-${b.status.toLowerCase()}`}>
                         {b.status}
                       </span>
-                      {scheduledInfo && (
-                        <div style={{ marginTop: '6px' }}>
-                          <span style={{ fontSize: '0.75rem', color: '#0d47a1', background: '#e3f2fd', border: '1px solid #bbdefb', borderRadius: '999px', padding: '3px 8px', fontWeight: 600 }}>
-                            Programado: {scheduledInfo.scheduleNumber}
-                          </span>
-                        </div>
-                      )}
                       {b.status === 'RECHAZADO' && b.rejectionReason && (
                         <div style={{ 
                           marginTop: '8px', 
@@ -1729,11 +1749,9 @@ export const BoletinMedicion: React.FC = () => {
                         </button>
                         {b.status === "PENDIENTE" && (
                           <>
-                            {!scheduledInfo && (
-                              <button className="btn-action-large btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
-                                <span>✏️</span> Editar
-                              </button>
-                            )}
+                            <button className="btn-action-large btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
+                              <span>✏️</span> Editar
+                            </button>
                             {(user?.role === 'admin' || user?.accessContabilidad) && (
                               <div className="approval-group-large">
                                 <button className="btn-action-large btn-approve" onClick={() => handleStatusChange(b.id, 'APROBADO')}>
@@ -1749,7 +1767,7 @@ export const BoletinMedicion: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                );})}
+                ))}
               </tbody>
             </table>
           </div>
@@ -1788,9 +1806,7 @@ export const BoletinMedicion: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredBoletines.map(b => {
-                        const scheduledInfo = getScheduledInfo(b);
-                        return (
+                      {filteredBoletines.map(b => (
                         <tr key={b.id}>
                           <td style={{ fontWeight: '600', color: '#1976d2' }}>{b.docNumber}</td>
                           <td>{new Date(b.date).toLocaleDateString('es-DO')}</td>
@@ -1802,13 +1818,6 @@ export const BoletinMedicion: React.FC = () => {
                           </td>
                           <td style={{ textAlign: 'center' }}>
                             <span className={`status-badge status-${b.status.toLowerCase()}`}>{b.status}</span>
-                            {scheduledInfo && (
-                              <div style={{ marginTop: '6px' }}>
-                                <span style={{ fontSize: '0.72rem', color: '#0d47a1', background: '#e3f2fd', border: '1px solid #bbdefb', borderRadius: '999px', padding: '2px 8px', fontWeight: 600 }}>
-                                  {scheduledInfo.scheduleNumber}
-                                </span>
-                              </div>
-                            )}
                           </td>
                           <td>
                             <div className="action-buttons-container-large">
@@ -1817,11 +1826,9 @@ export const BoletinMedicion: React.FC = () => {
                               </button>
                               {b.status === "PENDIENTE" && (
                                 <>
-                                  {!scheduledInfo && (
-                                    <button className="btn-action-large btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
-                                      <span>✏️</span> Editar
-                                    </button>
-                                  )}
+                                  <button className="btn-action-large btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
+                                    <span>✏️</span> Editar
+                                  </button>
                                   {(user?.role === 'admin' || user?.accessContabilidad) && (
                                     <div className="approval-group-large">
                                       <button className="btn-action-large btn-approve" onClick={() => handleStatusChange(b.id, 'APROBADO')}>
@@ -1837,7 +1844,7 @@ export const BoletinMedicion: React.FC = () => {
                             </div>
                           </td>
                         </tr>
-                      );})}
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -2393,7 +2400,8 @@ export const BoletinMedicion: React.FC = () => {
                   )}
                   {totals.isrAmount > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.85rem', paddingLeft: '10px' }}>
-                      {/* Eliminada Retención ISR */}
+                      <span>ISR ({isrPercent}%)</span>
+                      <span style={{ color: '#d32f2f', fontWeight: '600' }}>-${formatCurrency(totals.isrAmount)}</span>
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #ffb74d' }}>
@@ -2437,7 +2445,7 @@ export const BoletinMedicion: React.FC = () => {
                     lines: linesToPay.filter(l=>l.selected),
                     retentionPercent,
                     advancePercent,
-                    // Eliminada Retención ISR
+                    isrPercent,
                     status: editingId ? savedBoletines.find(b=>b.id===editingId)?.status : 'PENDIENTE',
                     rejectionReason: editingId ? savedBoletines.find(b=>b.id===editingId)?.rejectionReason : null,
                     // Agregar totales calculados
@@ -2753,7 +2761,6 @@ export const BoletinMedicion: React.FC = () => {
           font-size: 1.1rem;
           color: #1976d2;
         }
-
       `}</style>
     </div>
   );
