@@ -22,8 +22,9 @@ const AccordionItem: React.FC<AccordionProps> = ({ title, children, isOpen, onTo
   );
 };
 
-export const Sidebar: React.FC<{ 
-  onSelectManagement: () => void; 
+export const Sidebar: React.FC<{
+  activeTab: string;
+  onSelectManagement: () => void;
   onSelectDashboard: () => void;
   onSelectBudget: () => void;
   onSelectAdmCloud: () => void;
@@ -31,9 +32,8 @@ export const Sidebar: React.FC<{
   onSelectPaymentScheduling: () => void;
   onSelectRetentions: () => void;
   onSelectUnits: () => void;
-  onSelectPayrollReport: () => void;
   onSelectWarehouseAccess: () => void;
-}> = ({ onSelectManagement, onSelectDashboard, onSelectBudget, onSelectAdmCloud, onSelectBoletin, onSelectPaymentScheduling, onSelectRetentions, onSelectUnits, onSelectPayrollReport, onSelectWarehouseAccess }) => {
+}> = ({ activeTab, onSelectManagement, onSelectDashboard, onSelectBudget, onSelectAdmCloud, onSelectBoletin, onSelectPaymentScheduling, onSelectRetentions, onSelectUnits, onSelectWarehouseAccess }) => {
   const { user, logout } = useAuth();
   const [openSection, setOpenSection] = useState<string | null>('Ingeniería');
 
@@ -68,9 +68,9 @@ export const Sidebar: React.FC<{
         ) : (
           <>
             {user && (
-              <AccordionItem 
-                title={<><span style={{ fontSize: '1.2rem' }}>📏</span> INGENIERÍA</>} 
-                isOpen={openSection === 'Ingeniería'} 
+              <AccordionItem
+                title={<><span style={{ fontSize: '1.2rem' }}>📏</span> INGENIERÍA</>}
+                isOpen={openSection === 'Ingeniería'}
                 onToggle={() => toggleSection('Ingeniería')}
               >
                 <ul>
@@ -82,9 +82,9 @@ export const Sidebar: React.FC<{
             )}
 
             {user && (
-              <AccordionItem 
-                title={<><span style={{ fontSize: '1.2rem' }}>👷</span> SUBCONTRATOS</>} 
-                isOpen={openSection === 'Subcontratos'} 
+              <AccordionItem
+                title={<><span style={{ fontSize: '1.2rem' }}>👷</span> SUBCONTRATOS</>}
+                isOpen={openSection === 'Subcontratos'}
                 onToggle={() => toggleSection('Subcontratos')}
               >
                 <ul>
@@ -96,17 +96,16 @@ export const Sidebar: React.FC<{
             )}
 
             {user && (
-              <AccordionItem 
-                title={<><span style={{ fontSize: '1.2rem' }}>💰</span> CONTABILIDAD</>} 
-                isOpen={openSection === 'Contabilidad'} 
+              <AccordionItem
+                title={<><span style={{ fontSize: '1.2rem' }}>💰</span> CONTABILIDAD</>}
+                isOpen={openSection === 'Contabilidad'}
                 onToggle={() => toggleSection('Contabilidad')}
               >
                 <ul>
-                  <li onClick={onSelectBudget} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>📋</span>Presupuestos</li>
-                  <li onClick={onSelectAdmCloud} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>☁️</span>AdmCloud PO</li>
-                  <li onClick={onSelectPayrollReport} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>🧾</span>Reporte Nóminas</li>
-                  <li onClick={onSelectBoletin} style={{ cursor: 'pointer', fontWeight: 'bold', color: '#1976d2' }}><span style={{ marginRight: '8px' }}>📋</span>Boletín de Medición</li>
-                  <li onClick={onSelectPaymentScheduling} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>💳</span>Programación de Pagos</li>
+                  <li onClick={() => { console.log("Sidebar: Click Presupuestos"); onSelectBudget(); }} style={{ cursor: 'pointer', fontWeight: activeTab === 'budget' ? 'bold' : 'normal', color: activeTab === 'budget' ? '#1976d2' : 'inherit' }}><span style={{ marginRight: '8px' }}>📋</span>Presupuestos</li>
+                  <li onClick={() => { console.log("Sidebar: Click AdmCloud"); onSelectAdmCloud(); }} style={{ cursor: 'pointer', fontWeight: activeTab === 'admcloud' ? 'bold' : 'normal', color: activeTab === 'admcloud' ? '#1976d2' : 'inherit' }}><span style={{ marginRight: '8px' }}>☁️</span>AdmCloud PO</li>
+                  <li onClick={() => { console.log("Sidebar: Click Boletín"); onSelectBoletin(); }} style={{ cursor: 'pointer', fontWeight: activeTab === 'boletin' ? 'bold' : 'normal', color: activeTab === 'boletin' ? '#1976d2' : 'inherit' }}><span style={{ marginRight: '8px' }}>📋</span>Boletín de Medición</li>
+                  <li onClick={() => { console.log("Sidebar: Click Pagos"); onSelectPaymentScheduling(); }} style={{ cursor: 'pointer', fontWeight: activeTab === 'paymentScheduling' ? 'bold' : 'normal', color: activeTab === 'paymentScheduling' ? '#1976d2' : 'inherit' }}><span style={{ marginRight: '8px' }}>💳</span>Programación de Pagos</li>
                   <li><span style={{ marginRight: '8px' }}>📦</span>Órdenes de Compra</li>
                   <li><span style={{ marginRight: '8px' }}>📄</span>Reportes Financieros</li>
                 </ul>
@@ -115,16 +114,16 @@ export const Sidebar: React.FC<{
 
             {user?.role === 'admin' && (
               <div className="sidebar-accordion" style={{ marginTop: '1rem', borderTop: '1px solid #eee', paddingTop: '1rem' }}>
-                <AccordionItem 
-                  title={<><span style={{ fontSize: '1.2rem' }}>⚙️</span> ADMINISTRACIÓN</>} 
-                  isOpen={openSection === 'Admin'} 
+                <AccordionItem
+                  title={<><span style={{ fontSize: '1.2rem' }}>⚙️</span> ADMINISTRACIÓN</>}
+                  isOpen={openSection === 'Admin'}
                   onToggle={() => toggleSection('Admin')}
                 >
                   <ul>
-                    <li onClick={onSelectManagement} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>👥</span>Usuarios y Permisos</li>
-                    <li onClick={onSelectRetentions} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>📊</span>Catálogo de Retenciones</li>
-                    <li onClick={onSelectUnits} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>📐</span>Unidades de Medida</li>
-                    <li onClick={onSelectWarehouseAccess} style={{ cursor: 'pointer' }}><span style={{ marginRight: '8px' }}>🏬</span>Acceso Almacenes</li>
+                    <li onClick={() => { console.log("Sidebar: Click Usuarios"); onSelectManagement(); }} style={{ cursor: 'pointer', fontWeight: activeTab === 'users' ? 'bold' : 'normal', color: activeTab === 'users' ? '#1976d2' : 'inherit' }}><span style={{ marginRight: '8px' }}>👥</span>Usuarios y Permisos</li>
+                    <li onClick={() => { console.log("Sidebar: Click Retenciones"); onSelectRetentions(); }} style={{ cursor: 'pointer', fontWeight: activeTab === 'retentions' ? 'bold' : 'normal', color: activeTab === 'retentions' ? '#1976d2' : 'inherit' }}><span style={{ marginRight: '8px' }}>📊</span>Catálogo de Retenciones</li>
+                    <li onClick={() => { console.log("Sidebar: Click Unidades"); onSelectUnits(); }} style={{ cursor: 'pointer', fontWeight: activeTab === 'units' ? 'bold' : 'normal', color: activeTab === 'units' ? '#1976d2' : 'inherit' }}><span style={{ marginRight: '8px' }}>📐</span>Unidades de Medida</li>
+                    <li onClick={() => { console.log("Sidebar: Click Almacenes"); onSelectWarehouseAccess(); }} style={{ cursor: 'pointer', fontWeight: activeTab === 'warehouseAccess' ? 'bold' : 'normal', color: activeTab === 'warehouseAccess' ? '#1976d2' : 'inherit' }}><span style={{ marginRight: '8px' }}>🏬</span>Acceso Almacenes</li>
                   </ul>
                 </AccordionItem>
               </div>

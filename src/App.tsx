@@ -11,13 +11,16 @@ import { BoletinMedicion } from './components/BoletinMedicion'
 import { RetentionManagement } from './components/RetentionManagement'
 import { UnitOfMeasureManagement } from './components/UnitOfMeasureManagement'
 import { PaymentScheduling } from './components/PaymentScheduling'
-import { AdmCloudPayrollReport } from './components/AdmCloudPayrollReport'
 import WarehouseAccess from './components/WarehouseAccess'
 
 function App() {
   const { user, isLoading } = useAuth();
   const [view, setView] = useState<'login' | 'register'>('login');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'budget' | 'admcloud' | 'boletin' | 'paymentScheduling' | 'retentions' | 'units' | 'payrollReport' | 'warehouseAccess'>('dashboard');
+  const [activeTab, setActiveTabOriginal] = useState<'dashboard' | 'users' | 'budget' | 'admcloud' | 'boletin' | 'paymentScheduling' | 'retentions' | 'units' | 'warehouseAccess'>('dashboard');
+  const setActiveTab = (tab: any) => {
+    console.log(`App: Cambiando pestaña a: ${tab}`);
+    setActiveTabOriginal(tab);
+  };
   const [isEditingInNewTab, setIsEditingInNewTab] = useState(false);
   const [subcontractCount, setSubcontractCount] = useState<number>(0);
   const [loadingSubcontracts, setLoadingSubcontracts] = useState<boolean>(false);
@@ -157,7 +160,12 @@ function App() {
   }, [user]);
 
   if (isLoading) {
-    return <div className="loading-screen">Cargando Sistema de Obra...</div>;
+    return (
+      <div className="loading-screen" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div className="spinner"></div>
+        Cargando Sistema de Obra...
+      </div>
+    );
   }
 
   const renderContent = () => {
@@ -216,9 +224,6 @@ function App() {
       case 'units':
         return user?.role === 'admin' ? <UnitsWrapper /> : <div>No tiene permiso para acceder a esta sección.</div>;
 
-      case 'payrollReport':
-        return <PayrollReportWrapper />;
-
       case 'warehouseAccess':
         return user?.role === 'admin' ? <WarehouseAccess /> : <div>No tiene permiso para acceder a esta sección.</div>;
 
@@ -228,10 +233,11 @@ function App() {
   };
 
   return (
-    <div className="App">
+    <div className={`App ${user ? 'app-layout' : ''}`}>
       {user ? (
         <>
           <Sidebar
+            activeTab={activeTab}
             onSelectManagement={() => setActiveTab('users')}
             onSelectDashboard={() => setActiveTab('dashboard')}
             onSelectBudget={() => setActiveTab('budget')}
@@ -240,17 +246,16 @@ function App() {
             onSelectPaymentScheduling={() => setActiveTab('paymentScheduling')}
             onSelectRetentions={() => setActiveTab('retentions')}
             onSelectUnits={() => setActiveTab('units')}
-            onSelectPayrollReport={() => setActiveTab('payrollReport')}
             onSelectWarehouseAccess={() => setActiveTab('warehouseAccess')}
           />
           <main className="main-content">{renderContent()}</main>
         </>
       ) : (
-        <div className="auth-container">
+        <div className="auth-wrapper">
           {view === 'login' ? (
-            <LoginForm onSwitch={() => setView('register')} />
+            <LoginForm onToggle={() => setView('register')} />
           ) : (
-            <RegisterForm onSwitch={() => setView('login')} />
+            <RegisterForm onToggle={() => setView('login')} />
           )}
         </div>
       )}
@@ -325,16 +330,6 @@ const UnitsWrapper = () => (
       <p>Administración de unidades para uso en boletines de medición</p>
     </header>
     <UnitOfMeasureManagement />
-  </>
-);
-
-const PayrollReportWrapper = () => (
-  <>
-    <header className="content-header">
-      <h1>Reporte de Nóminas AdmCloud</h1>
-      <p>Consulta columnar de nóminas generadas y su detalle de empleados</p>
-    </header>
-    <AdmCloudPayrollReport />
   </>
 );
 

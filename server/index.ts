@@ -107,16 +107,16 @@ const authenticateToken = (req: any, res: any, next: () => void) => {
 
   jwt.verify(token, JWT_SECRET, async (err: any, decoded: any) => {
     if (err) return res.status(403).json({ message: "Invalid token" });
-    
+
     // Verificar si el usuario aún existe y está aprobado
     try {
       const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
       if (!user) return res.status(404).json({ message: "User no longer exists" });
-      
+
       if (!user.isApproved) {
         return res.status(403).json({ message: "Acceso revocado. Contacte a TI." });
       }
-      
+
       req.user = { ...decoded, ...user }; // Pasar los datos completos del usuario
       next();
     } catch {
@@ -135,7 +135,7 @@ app.post("/api/register", async (req, res) => {
 
     const userCount = await prisma.user.count();
     const isFirstUser = userCount === 0;
-    
+
     // First user is admin and approved, others wait for approval unless admin is creating them
     const role = isFirstUser ? "admin" : "user";
     const isApproved = isFirstUser || isApprovedFromAdmin === true;
@@ -143,9 +143,9 @@ app.post("/api/register", async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
-      data: { 
-        email, 
-        password: hashedPassword, 
+      data: {
+        email,
+        password: hashedPassword,
         name,
         role,
         isApproved,
@@ -165,7 +165,7 @@ app.post("/api/register", async (req, res) => {
     }
 
     const message = (isFirstUser || isApprovedFromAdmin)
-      ? "Usuario creado" 
+      ? "Usuario creado"
       : "Solicitud de acceso enviada. El área de tecnología revisará su petición.";
 
     res.status(201).json({ message, userId: user.id });
@@ -190,16 +190,16 @@ app.post("/api/login", async (req, res) => {
 
     if (user.isApproved === false || !user.isApproved) {
       console.log(`Acceso denegado: Usuario ${email} no está aprobado.`);
-      return res.status(403).json({ 
-        message: "Su cuenta está pendiente de aprobación. Por favor, espere a que el departamento de TI apruebe sus accesos." 
+      return res.status(403).json({
+        message: "Su cuenta está pendiente de aprobación. Por favor, espere a que el departamento de TI apruebe sus accesos."
       });
     }
 
     const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: "1h" });
 
-    const userResponse = { 
-      id: user.id, 
-      email: user.email, 
+    const userResponse = {
+      id: user.id,
+      email: user.email,
       name: user.name,
       role: user.role,
       isApproved: !!user.isApproved,
@@ -210,9 +210,9 @@ app.post("/api/login", async (req, res) => {
 
     console.log(`Login exitoso. Enviando datos de usuario:`, userResponse);
 
-    res.json({ 
-      token, 
-      user: userResponse 
+    res.json({
+      token,
+      user: userResponse
     });
   } catch {
     res.status(500).json({ message: "Login error" });
@@ -234,9 +234,9 @@ app.get("/api/users", authenticateToken, async (req, res) => {
         accessContabilidad: true,
       }
     });
-    
+
     console.log(`Debug API Users: Encontrados ${users.length} usuarios. Keys del primero:`, Object.keys(users[0] || {}));
-    
+
     res.json(users);
   } catch {
     res.status(500).json({ message: "Error fetching users" });
@@ -260,12 +260,12 @@ app.put("/api/users/:id/permissions", authenticateToken, async (req, res) => {
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: { 
-        accessIngenieria: typeof accessIngenieria === 'boolean' ? accessIngenieria : previousUser.accessIngenieria, 
-        accessSubcontratos: typeof accessSubcontratos === 'boolean' ? accessSubcontratos : previousUser.accessSubcontratos, 
-        accessContabilidad: typeof accessContabilidad === 'boolean' ? accessContabilidad : previousUser.accessContabilidad, 
-        role: role || previousUser.role, 
-        isApproved: typeof isApproved === 'boolean' ? isApproved : previousUser.isApproved 
+      data: {
+        accessIngenieria: typeof accessIngenieria === 'boolean' ? accessIngenieria : previousUser.accessIngenieria,
+        accessSubcontratos: typeof accessSubcontratos === 'boolean' ? accessSubcontratos : previousUser.accessSubcontratos,
+        accessContabilidad: typeof accessContabilidad === 'boolean' ? accessContabilidad : previousUser.accessContabilidad,
+        role: role || previousUser.role,
+        isApproved: typeof isApproved === 'boolean' ? isApproved : previousUser.isApproved
       },
       select: {
         id: true,
@@ -298,12 +298,12 @@ app.get("/api/me", authenticateToken, async (req: any, res) => {
     const user = await prisma.user.findUnique({
       where: { id: req.user.userId }
     });
-    
+
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    const responseData = { 
-      id: user.id, 
-      email: user.email, 
+    const responseData = {
+      id: user.id,
+      email: user.email,
       name: user.name,
       role: user.role,
       isApproved: !!user.isApproved,
@@ -323,7 +323,7 @@ app.get("/api/me", authenticateToken, async (req: any, res) => {
 // Budget Routes
 app.post("/api/budgets/upload", authenticateToken, upload.single("file"), async (req: any, res: any) => {
   const { projectName, description } = req.body;
-  
+
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded" });
   }
@@ -380,7 +380,7 @@ app.post("/api/budgets/upload", authenticateToken, upload.single("file"), async 
 
       // Si no hay descripción, saltar
       if (!description) return null;
-      
+
       // Filtrar para obtener solo lo relevante (Capítulos o Partidas con código)
       // En el formato Presto, las partidas suelen tener NAT='Partida' o tienen Unidad
       if (!code && !unit && !nat) return null;
@@ -533,15 +533,15 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
     const pool = await connectAdmCloud();
     const user = (req as any).user;
     const departmentFilterParam = req.query.departmentFilter;
-    
+
     // Determinar el filtro según el parámetro enviado y los permisos del usuario
     let departmentFilter = '';
-    
+
     if (departmentFilterParam === 'subcontratos' && user?.accessSubcontratos) {
       // Si el usuario solicita filtrar por Subcontratos y tiene el permiso
       departmentFilter = `AND t.[DepartmentID] = '134A52D2-1FF9-4BB1-564D-08DE34362E70'`;
     }
-    
+
     const query = `
         SELECT TOP 1000
             t.[ID],
@@ -568,17 +568,17 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
           ${departmentFilter}
         ORDER BY p.[Name] ASC, t.[DocDate] DESC, t.[DocID] DESC
     `;
-    
+
     console.log('\n🔍 === FILTRO DE TRANSACCIONES ===');
     console.log(`Usuario: ${user?.email}`);
     console.log(`Query param 'departmentFilter': ${departmentFilterParam || 'NO ENVIADO'}`);
     console.log(`Permiso accessSubcontratos: ${user?.accessSubcontratos}`);
     console.log(`Filtro SQL generado: ${departmentFilter || 'NINGUNO (todas las órdenes)'}`);
     console.log(`Query completa: ${query.substring(0, 300)}...`);
-    
+
     const result = await pool.request().query(query);
     console.log(`✅ Resultados devueltos: ${result.recordset.length} órdenes`);
-    
+
     // Log de monedas para depuración
     const ordenesPorMoneda = result.recordset.reduce((acc: any, r: any) => {
       const curr = r.Currency || 'NULL';
@@ -586,7 +586,7 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
       return acc;
     }, {});
     console.log('💰 Distribución de monedas:', ordenesPorMoneda);
-    
+
     if (departmentFilterParam === 'subcontratos') {
       console.log(`📋 DocIDs devueltos: ${result.recordset.map((r: any) => r.DocID).join(', ')}`);
     }
@@ -598,25 +598,25 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
   }
 });
 
-    // Endpoint para asignar acceso a almacenes (AdmCloud)
-    app.post("/api/admcloud/warehouse-access", authenticateToken, async (req, res) => {
-      const { Users } = req.body;
-      if (!Array.isArray(Users) || Users.length === 0) {
-        return res.status(400).json({ message: "Debe enviar un array 'Users' con al menos un usuario." });
+// Endpoint para asignar acceso a almacenes (AdmCloud)
+app.post("/api/admcloud/warehouse-access", authenticateToken, async (req, res) => {
+  const { Users } = req.body;
+  if (!Array.isArray(Users) || Users.length === 0) {
+    return res.status(400).json({ message: "Debe enviar un array 'Users' con al menos un usuario." });
+  }
+  try {
+    const pool = await connectAdmCloud();
+    for (const user of Users) {
+      if (!user.ID || !user.LocationID || !user.RelationshipID || !user.RelationshipName) {
+        return res.status(400).json({ message: "Faltan campos requeridos en uno de los usuarios." });
       }
-      try {
-        const pool = await connectAdmCloud();
-        for (const user of Users) {
-          if (!user.ID || !user.LocationID || !user.RelationshipID || !user.RelationshipName) {
-            return res.status(400).json({ message: "Faltan campos requeridos en uno de los usuarios." });
-          }
 
-          await pool.request()
-            .input("UserID", user.ID)
-            .input("LocationID", user.LocationID)
-            .input("RelationshipID", user.RelationshipID)
-            .input("RelationshipName", user.RelationshipName)
-            .query(`
+      await pool.request()
+        .input("UserID", user.ID)
+        .input("LocationID", user.LocationID)
+        .input("RelationshipID", user.RelationshipID)
+        .input("RelationshipName", user.RelationshipName)
+        .query(`
               MERGE INTO SA_UserWarehouseAccess AS target
               USING (SELECT @UserID AS UserID, @LocationID AS LocationID) AS source
               ON (target.UserID = source.UserID AND target.LocationID = source.LocationID)
@@ -626,20 +626,20 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
                 INSERT (UserID, LocationID, RelationshipID, RelationshipName)
                 VALUES (@UserID, @LocationID, @RelationshipID, @RelationshipName);
             `);
-        }
-        res.json({ message: "Accesos a almacenes actualizados correctamente." });
-      } catch (error: any) {
-        console.error("Error al asignar acceso a almacenes:", error);
-        res.status(500).json({ message: "Error al asignar acceso a almacenes", detail: error.message });
-      }
-    });
+    }
+    res.json({ message: "Accesos a almacenes actualizados correctamente." });
+  } catch (error: any) {
+    console.error("Error al asignar acceso a almacenes:", error);
+    res.status(500).json({ message: "Error al asignar acceso a almacenes", detail: error.message });
+  }
+});
 
 // Get single Transaction by ID
 app.get("/api/admcloud/transactions/:id", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const pool = await connectAdmCloud();
-    
+
     const query = `
         SELECT TOP 1
             t.[ID],
@@ -661,13 +661,13 @@ app.get("/api/admcloud/transactions/:id", authenticateToken, async (req, res) =>
         LEFT JOIN [dbo].[PA_Projects] p ON t.[ProjectID] = p.[ID]
         WHERE t.[ID] = '${id}'
     `;
-    
+
     const result = await pool.request().query(query);
-    
+
     if (result.recordset.length === 0) {
       return res.status(404).json({ message: "Transacción no encontrada" });
     }
-    
+
     res.json(result.recordset[0]);
   } catch (error) {
     console.error("Error fetching AdmCloud transaction:", error);
@@ -680,7 +680,7 @@ app.get("/api/admcloud/transactions/:id/receptions", authenticateToken, async (r
   try {
     const { id } = req.params;
     const pool = await connectAdmCloud();
-    
+
     const query = `
       SELECT DISTINCT
           rt.[ID],
@@ -697,11 +697,11 @@ app.get("/api/admcloud/transactions/:id/receptions", authenticateToken, async (r
       AND rt.[Void] = 0
       ORDER BY rt.[DocDate] DESC
     `;
-    
+
     const result = await pool.request()
       .input('transId', id)
       .query(query);
-    
+
     console.log('📦 Recepciones encontradas para OC:', id, '→', result.recordset.length);
     if (result.recordset.length > 0) {
       console.log('📅 Fechas en recepciones:', result.recordset.map(r => ({
@@ -710,7 +710,7 @@ app.get("/api/admcloud/transactions/:id/receptions", authenticateToken, async (r
         EndDate: r.MeasurementEndDate
       })));
     }
-    
+
     res.json(result.recordset);
   } catch (error) {
     console.error("Error fetching receptions:", error);
@@ -723,7 +723,7 @@ app.get("/api/admcloud/transactions/:id/items", authenticateToken, async (req, r
   try {
     const { id } = req.params;
     const pool = await connectAdmCloud();
-    
+
     // Consulta mejorada para traer items de la PO y sumar sus recepciones vinculadas
     const query = `
         SELECT 
@@ -781,14 +781,14 @@ app.get("/api/admcloud/transactions/:id/items", authenticateToken, async (req, r
     const finalItems = admItems.map((it: any) => {
       const paidObj = paidQuantities.find(p => p.externalItemID === it.ItemID);
       // Limpiar la lista de recepciones (remover coma final y espacios)
-      const receptions = it.ReceptionList ? it.ReceptionList.split(',').filter((r:string) => r.trim() !== '').join(', ') : '';
-      
+      const receptions = it.ReceptionList ? it.ReceptionList.split(',').filter((r: string) => r.trim() !== '').join(', ') : '';
+
       const item = {
         ...it,
         ReceptionNumbers: receptions,
         PaidQuantity: paidObj?._sum?.quantity || 0
       };
-      
+
       // Log para depuración de impuestos
       if (it.TaxAmount === 0 && it.TaxPercent > 0) {
         console.log(`⚠️ Item ${it.ItemID} tiene TaxPercent=${it.TaxPercent}% pero TaxAmount=0`);
@@ -796,7 +796,7 @@ app.get("/api/admcloud/transactions/:id/items", authenticateToken, async (req, r
 
       return item;
     });
-    
+
     console.log(`✅ Items devueltos: ${finalItems.length}`);
     res.json(finalItems);
   } catch (error) {
@@ -805,461 +805,6 @@ app.get("/api/admcloud/transactions/:id/items", authenticateToken, async (req, r
   }
 });
 
-// Payroll report from AdmCloud
-app.get("/api/admcloud/payrolls", authenticateToken, async (req, res) => {
-  try {
-    const pool = await connectAdmCloud();
-    const subsidiaryId = String(req.query.subsidiaryId || "FBC6AADF-8B12-47F7-AA18-08DDDFE6F02E");
-
-    const query = `
-      SELECT
-        [ID],
-        [SubsidiaryID],
-        [DocID],
-        [DocType],
-        [DocDate],
-        [DateTo],
-        [Reference],
-        [PaymentTypeID],
-        [Year],
-        [Month],
-        STUFF((
-          SELECT DISTINCT ', ' + bd.[Name]
-          FROM [dbo].[SA_Trans_Employees] e
-          LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON e.[BenefitDiscountID] = bd.[ID]
-          WHERE e.[TransID] = t.[ID]
-            AND bd.[Name] IS NOT NULL
-          FOR XML PATH(''), TYPE
-        ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') as ConceptSummary
-      FROM [dbo].[SA_Transactions] t
-      WHERE [DocType] = 'PAYROLL'
-        AND [SubsidiaryID] = @subsidiaryId
-      ORDER BY [Year] DESC, [Month] DESC, [DocDate] DESC
-    `;
-
-    const result = await pool.request()
-      .input("subsidiaryId", subsidiaryId)
-      .query(query);
-
-    res.json(result.recordset);
-  } catch (error) {
-    console.error("Error fetching AdmCloud payroll report:", error);
-    res.status(500).json({ message: "Error al consultar nóminas en AdmCloud" });
-  }
-});
-
-// Payroll detail (employees) from AdmCloud
-app.get("/api/admcloud/payrolls/:id/employees", authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const pool = await connectAdmCloud();
-
-    const queryByTransId = `
-      SELECT
-        e.*,
-        r.[FullName] as EmployeeName
-      FROM [dbo].[SA_Trans_Employees] e
-      LEFT JOIN [dbo].[SA_Relationships] r ON r.[ID] = e.[EmployeeID]
-      WHERE e.[TransID] = @transId
-      ORDER BY r.[FullName] ASC, e.[BenefitDiscountID] ASC
-    `;
-
-    const byTransId = await pool.request()
-      .input("transId", id)
-      .query(queryByTransId);
-
-    if (byTransId.recordset.length > 0) {
-      return res.json(byTransId.recordset);
-    }
-
-    const queryByDocId = `
-      SELECT
-        e.*,
-        r.[FullName] as EmployeeName
-      FROM [dbo].[SA_Trans_Employees] e
-      INNER JOIN [dbo].[SA_Transactions] t ON e.[TransID] = t.[ID]
-      LEFT JOIN [dbo].[SA_Relationships] r ON r.[ID] = e.[EmployeeID]
-      WHERE t.[DocID] = @docId
-      ORDER BY r.[FullName] ASC, e.[BenefitDiscountID] ASC
-    `;
-
-    const byDocId = await pool.request()
-      .input("docId", id)
-      .query(queryByDocId);
-
-    res.json(byDocId.recordset);
-  } catch (error) {
-    console.error("Error fetching AdmCloud payroll detail:", error);
-    res.status(500).json({ message: "Error al consultar detalle de nómina en AdmCloud" });
-  }
-});
-
-// Payroll detail by document ID
-app.get("/api/admcloud/payrolls/by-doc/:docId/employees", authenticateToken, async (req, res) => {
-  try {
-    const { docId } = req.params;
-    const pool = await connectAdmCloud();
-
-    const query = `
-      SELECT
-        e.*,
-        r.[FullName] as EmployeeName
-      FROM [dbo].[SA_Trans_Employees] e
-      INNER JOIN [dbo].[SA_Transactions] t ON e.[TransID] = t.[ID]
-      LEFT JOIN [dbo].[SA_Relationships] r ON r.[ID] = e.[EmployeeID]
-      WHERE t.[DocID] = @docId
-      ORDER BY r.[FullName] ASC, e.[BenefitDiscountID] ASC
-    `;
-
-    const result = await pool.request()
-      .input("docId", docId)
-      .query(query);
-
-    res.json(result.recordset);
-  } catch (error) {
-    console.error("Error fetching AdmCloud payroll detail:", error);
-    res.status(500).json({ message: "Error al consultar detalle de nómina en AdmCloud" });
-  }
-});
-
-// Payroll concepts (benefits/discounts) by transaction ID (fallback to DocID)
-app.get("/api/admcloud/payrolls/:id/benefits-discounts", authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const pool = await connectAdmCloud();
-
-    const queryByTransId = `
-      SELECT
-        tx.[ID],
-        tx.[RowOrder],
-        tx.[TransID],
-        tx.[BenefitDiscountID],
-        bd.[Name] as BenefitDiscountName,
-        bd.[Code] as BenefitDiscountCode,
-        bd.[Type] as BenefitDiscountTypeID,
-        bdt.[Name] as BenefitDiscountType,
-        tx.[Amount],
-        tx.[Quantity],
-        tx.[FlatFeeAmount],
-        tx.[FeePercent],
-        tx.[BillablePercent],
-        tx.[Unit],
-        tx.[IncludeInPeriod1],
-        tx.[IncludeInPeriod2],
-        tx.[IncludeInPeriod3],
-        tx.[IncludeInPeriod4],
-        tx.[Notes]
-      FROM [dbo].[PR_Transactions_Benefits_Discounts] tx
-      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON tx.[BenefitDiscountID] = bd.[ID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bd.[Type] = bdt.[ID]
-      WHERE tx.[TransID] = @transId
-      ORDER BY tx.[RowOrder] ASC, bd.[Name] ASC
-    `;
-
-    const byTransId = await pool.request()
-      .input("transId", id)
-      .query(queryByTransId);
-
-    if (byTransId.recordset.length > 0) {
-      return res.json(byTransId.recordset);
-    }
-
-    const fallbackByTransId = `
-      SELECT
-        MIN(e.[ID]) as [ID],
-        e.[TransID],
-        e.[BenefitDiscountID],
-        bd.[Name] as BenefitDiscountName,
-        bd.[Code] as BenefitDiscountCode,
-        bd.[Type] as BenefitDiscountTypeID,
-        bdt.[Name] as BenefitDiscountType,
-        COUNT(1) as EmployeeLines,
-        SUM(ISNULL(e.[Amount], 0)) as Amount,
-        SUM(ISNULL(e.[Quantity], 0)) as Quantity,
-        SUM(ISNULL(e.[Total], 0)) as Total,
-        STUFF((
-          SELECT DISTINCT ',' + CAST(c.[ConceptID] AS VARCHAR(36))
-          FROM [dbo].[PR_Benefits_Discounts_Concepts] c
-          WHERE c.[BenefitDiscountID] = e.[BenefitDiscountID]
-          FOR XML PATH(''), TYPE
-        ).value('.', 'NVARCHAR(MAX)'), 1, 1, '') as ConceptIDs,
-        COUNT(DISTINCT c2.[ConceptID]) as ConceptCount,
-        'SA_Trans_Employees' as DataSource
-      FROM [dbo].[SA_Trans_Employees] e
-      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON e.[BenefitDiscountID] = bd.[ID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bd.[Type] = bdt.[ID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts_Concepts] c2 ON e.[BenefitDiscountID] = c2.[BenefitDiscountID]
-      WHERE e.[TransID] = @transId
-      GROUP BY e.[TransID], e.[BenefitDiscountID], bd.[Name], bd.[Code], bd.[Type], bdt.[Name]
-      ORDER BY bd.[Name] ASC
-    `;
-
-    const fallbackRows = await pool.request()
-      .input("transId", id)
-      .query(fallbackByTransId);
-
-    if (fallbackRows.recordset.length > 0) {
-      return res.json(fallbackRows.recordset);
-    }
-
-    const queryByDocId = `
-      SELECT
-        tx.[ID],
-        tx.[RowOrder],
-        tx.[TransID],
-        tx.[BenefitDiscountID],
-        bd.[Name] as BenefitDiscountName,
-        bd.[Code] as BenefitDiscountCode,
-        bd.[Type] as BenefitDiscountTypeID,
-        bdt.[Name] as BenefitDiscountType,
-        tx.[Amount],
-        tx.[Quantity],
-        tx.[FlatFeeAmount],
-        tx.[FeePercent],
-        tx.[BillablePercent],
-        tx.[Unit],
-        tx.[IncludeInPeriod1],
-        tx.[IncludeInPeriod2],
-        tx.[IncludeInPeriod3],
-        tx.[IncludeInPeriod4],
-        tx.[Notes]
-      FROM [dbo].[PR_Transactions_Benefits_Discounts] tx
-      INNER JOIN [dbo].[SA_Transactions] t ON tx.[TransID] = t.[ID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON tx.[BenefitDiscountID] = bd.[ID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bd.[Type] = bdt.[ID]
-      WHERE t.[DocID] = @docId
-      ORDER BY tx.[RowOrder] ASC, bd.[Name] ASC
-    `;
-
-    const byDocId = await pool.request()
-      .input("docId", id)
-      .query(queryByDocId);
-
-    if (byDocId.recordset.length > 0) {
-      return res.json(byDocId.recordset);
-    }
-
-    const fallbackByDocId = `
-      SELECT
-        MIN(e.[ID]) as [ID],
-        e.[TransID],
-        e.[BenefitDiscountID],
-        bd.[Name] as BenefitDiscountName,
-        bd.[Code] as BenefitDiscountCode,
-        bd.[Type] as BenefitDiscountTypeID,
-        bdt.[Name] as BenefitDiscountType,
-        COUNT(1) as EmployeeLines,
-        SUM(ISNULL(e.[Amount], 0)) as Amount,
-        SUM(ISNULL(e.[Quantity], 0)) as Quantity,
-        SUM(ISNULL(e.[Total], 0)) as Total,
-        STUFF((
-          SELECT DISTINCT ',' + CAST(c.[ConceptID] AS VARCHAR(36))
-          FROM [dbo].[PR_Benefits_Discounts_Concepts] c
-          WHERE c.[BenefitDiscountID] = e.[BenefitDiscountID]
-          FOR XML PATH(''), TYPE
-        ).value('.', 'NVARCHAR(MAX)'), 1, 1, '') as ConceptIDs,
-        COUNT(DISTINCT c2.[ConceptID]) as ConceptCount,
-        'SA_Trans_Employees' as DataSource
-      FROM [dbo].[SA_Trans_Employees] e
-      INNER JOIN [dbo].[SA_Transactions] t ON e.[TransID] = t.[ID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON e.[BenefitDiscountID] = bd.[ID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bd.[Type] = bdt.[ID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts_Concepts] c2 ON e.[BenefitDiscountID] = c2.[BenefitDiscountID]
-      WHERE t.[DocID] = @docId
-      GROUP BY e.[TransID], e.[BenefitDiscountID], bd.[Name], bd.[Code], bd.[Type], bdt.[Name]
-      ORDER BY bd.[Name] ASC
-    `;
-
-    const fallbackByDocRows = await pool.request()
-      .input("docId", id)
-      .query(fallbackByDocId);
-
-    res.json(fallbackByDocRows.recordset);
-  } catch (error) {
-    console.error("Error fetching AdmCloud payroll benefits/discounts:", error);
-    res.status(500).json({ message: "Error al consultar conceptos de pago y descuentos" });
-  }
-});
-
-// Payroll concepts (benefits/discounts) by DocID
-app.get("/api/admcloud/payrolls/by-doc/:docId/benefits-discounts", authenticateToken, async (req, res) => {
-  try {
-    const { docId } = req.params;
-    const pool = await connectAdmCloud();
-
-    const query = `
-      SELECT
-        tx.[ID],
-        tx.[RowOrder],
-        tx.[TransID],
-        tx.[BenefitDiscountID],
-        bd.[Name] as BenefitDiscountName,
-        bd.[Code] as BenefitDiscountCode,
-        bd.[Type] as BenefitDiscountTypeID,
-        bdt.[Name] as BenefitDiscountType,
-        tx.[Amount],
-        tx.[Quantity],
-        tx.[FlatFeeAmount],
-        tx.[FeePercent],
-        tx.[BillablePercent],
-        tx.[Unit],
-        tx.[IncludeInPeriod1],
-        tx.[IncludeInPeriod2],
-        tx.[IncludeInPeriod3],
-        tx.[IncludeInPeriod4],
-        tx.[Notes]
-      FROM [dbo].[PR_Transactions_Benefits_Discounts] tx
-      INNER JOIN [dbo].[SA_Transactions] t ON tx.[TransID] = t.[ID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON tx.[BenefitDiscountID] = bd.[ID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bd.[Type] = bdt.[ID]
-      WHERE t.[DocID] = @docId
-      ORDER BY tx.[RowOrder] ASC, bd.[Name] ASC
-    `;
-
-    const result = await pool.request()
-      .input("docId", docId)
-      .query(query);
-
-    if (result.recordset.length > 0) {
-      return res.json(result.recordset);
-    }
-
-    const fallbackQuery = `
-      SELECT
-        MIN(e.[ID]) as [ID],
-        e.[TransID],
-        e.[BenefitDiscountID],
-        bd.[Name] as BenefitDiscountName,
-        bd.[Code] as BenefitDiscountCode,
-        bd.[Type] as BenefitDiscountTypeID,
-        bdt.[Name] as BenefitDiscountType,
-        COUNT(1) as EmployeeLines,
-        SUM(ISNULL(e.[Amount], 0)) as Amount,
-        SUM(ISNULL(e.[Quantity], 0)) as Quantity,
-        SUM(ISNULL(e.[Total], 0)) as Total,
-        STUFF((
-          SELECT DISTINCT ',' + CAST(c.[ConceptID] AS VARCHAR(36))
-          FROM [dbo].[PR_Benefits_Discounts_Concepts] c
-          WHERE c.[BenefitDiscountID] = e.[BenefitDiscountID]
-          FOR XML PATH(''), TYPE
-        ).value('.', 'NVARCHAR(MAX)'), 1, 1, '') as ConceptIDs,
-        COUNT(DISTINCT c2.[ConceptID]) as ConceptCount,
-        'SA_Trans_Employees' as DataSource
-      FROM [dbo].[SA_Trans_Employees] e
-      INNER JOIN [dbo].[SA_Transactions] t ON e.[TransID] = t.[ID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON e.[BenefitDiscountID] = bd.[ID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bd.[Type] = bdt.[ID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts_Concepts] c2 ON e.[BenefitDiscountID] = c2.[BenefitDiscountID]
-      WHERE t.[DocID] = @docId
-      GROUP BY e.[TransID], e.[BenefitDiscountID], bd.[Name], bd.[Code], bd.[Type], bdt.[Name]
-      ORDER BY bd.[Name] ASC
-    `;
-
-    const fallbackResult = await pool.request()
-      .input("docId", docId)
-      .query(fallbackQuery);
-
-    res.json(fallbackResult.recordset);
-  } catch (error) {
-    console.error("Error fetching AdmCloud payroll benefits/discounts by doc:", error);
-    res.status(500).json({ message: "Error al consultar conceptos de pago y descuentos" });
-  }
-});
-
-// Payroll summary by employee (income/discount/net)
-app.get("/api/admcloud/payrolls/:id/employee-summary", authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const pool = await connectAdmCloud();
-
-    const queryByTransId = `
-      SELECT
-        e.[EmployeeID],
-        r.[FullName] as EmployeeName,
-        COUNT(1) as Lines,
-        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) >= 0 THEN ISNULL(e.[Amount], 0) ELSE 0 END) as TotalIngresos,
-        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) < 0 THEN ISNULL(e.[Amount], 0) ELSE 0 END) as TotalDescuentos,
-        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) >= 0 THEN ISNULL(e.[Amount], 0) ELSE -ISNULL(e.[Amount], 0) END) as NetoEmpleado
-      FROM [dbo].[SA_Trans_Employees] e
-      LEFT JOIN [dbo].[SA_Relationships] r ON r.[ID] = e.[EmployeeID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON bd.[ID] = e.[BenefitDiscountID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bdt.[ID] = bd.[Type]
-      WHERE e.[TransID] = @transId
-      GROUP BY e.[EmployeeID], r.[FullName]
-      ORDER BY NetoEmpleado DESC
-    `;
-
-    const byTransId = await pool.request()
-      .input("transId", id)
-      .query(queryByTransId);
-
-    if (byTransId.recordset.length > 0) {
-      return res.json(byTransId.recordset);
-    }
-
-    const queryByDocId = `
-      SELECT
-        e.[EmployeeID],
-        r.[FullName] as EmployeeName,
-        COUNT(1) as Lines,
-        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) >= 0 THEN ISNULL(e.[Amount], 0) ELSE 0 END) as TotalIngresos,
-        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) < 0 THEN ISNULL(e.[Amount], 0) ELSE 0 END) as TotalDescuentos,
-        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) >= 0 THEN ISNULL(e.[Amount], 0) ELSE -ISNULL(e.[Amount], 0) END) as NetoEmpleado
-      FROM [dbo].[SA_Trans_Employees] e
-      INNER JOIN [dbo].[SA_Transactions] t ON e.[TransID] = t.[ID]
-      LEFT JOIN [dbo].[SA_Relationships] r ON r.[ID] = e.[EmployeeID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON bd.[ID] = e.[BenefitDiscountID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bdt.[ID] = bd.[Type]
-      WHERE t.[DocID] = @docId
-      GROUP BY e.[EmployeeID], r.[FullName]
-      ORDER BY NetoEmpleado DESC
-    `;
-
-    const byDocId = await pool.request()
-      .input("docId", id)
-      .query(queryByDocId);
-
-    res.json(byDocId.recordset);
-  } catch (error) {
-    console.error("Error fetching payroll employee summary:", error);
-    res.status(500).json({ message: "Error al consultar resumen por empleado" });
-  }
-});
-
-// Payroll summary by employee by DocID
-app.get("/api/admcloud/payrolls/by-doc/:docId/employee-summary", authenticateToken, async (req, res) => {
-  try {
-    const { docId } = req.params;
-    const pool = await connectAdmCloud();
-
-    const query = `
-      SELECT
-        e.[EmployeeID],
-        r.[FullName] as EmployeeName,
-        COUNT(1) as Lines,
-        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) >= 0 THEN ISNULL(e.[Amount], 0) ELSE 0 END) as TotalIngresos,
-        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) < 0 THEN ISNULL(e.[Amount], 0) ELSE 0 END) as TotalDescuentos,
-        SUM(CASE WHEN ISNULL(bdt.[Factor], 1) >= 0 THEN ISNULL(e.[Amount], 0) ELSE -ISNULL(e.[Amount], 0) END) as NetoEmpleado
-      FROM [dbo].[SA_Trans_Employees] e
-      INNER JOIN [dbo].[SA_Transactions] t ON e.[TransID] = t.[ID]
-      LEFT JOIN [dbo].[SA_Relationships] r ON r.[ID] = e.[EmployeeID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts] bd ON bd.[ID] = e.[BenefitDiscountID]
-      LEFT JOIN [dbo].[PR_Benefits_Discounts_Types] bdt ON bdt.[ID] = bd.[Type]
-      WHERE t.[DocID] = @docId
-      GROUP BY e.[EmployeeID], r.[FullName]
-      ORDER BY NetoEmpleado DESC
-    `;
-
-    const result = await pool.request()
-      .input("docId", docId)
-      .query(query);
-
-    res.json(result.recordset);
-  } catch (error) {
-    console.error("Error fetching payroll employee summary by doc:", error);
-    res.status(500).json({ message: "Error al consultar resumen por empleado" });
-  }
-});
 
 // Create a Measurement (Link OC item to Budget item)
 app.post("/api/measurements", authenticateToken, async (req, res) => {
@@ -1358,8 +903,8 @@ const resolveScheduledLine = (paymentRequest: any) => {
 };
 
 app.post("/api/payment-requests", authenticateToken, async (req, res) => {
-  const { 
-    externalTxID, docID, vendorName, vendorFiscalID, projectName, 
+  const {
+    externalTxID, docID, vendorName, vendorFiscalID, projectName,
     lines, retentionPercent, advancePercent, isrPercent,
     receptionNumbers, measurementStartDate, measurementEndDate
   } = req.body;
@@ -1394,12 +939,12 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
       const lineRetention = (l.quantity * l.unitPrice) * ((l.retentionPercent || 0) / 100);
       const lineItbisRetention = lineTax * ((l.itbisRetentionPercent || 0) / 100);
       const lineTotal = (l.quantity * l.unitPrice) + lineTax - lineRetention - lineItbisRetention;
-      
+
       subTotal += (l.quantity * l.unitPrice);
       taxAmount += lineTax;
       totalRetentionByLine += lineRetention;
       totalItbisRetention += lineItbisRetention;
-      
+
       return {
         externalItemID: l.externalItemID,
         description: l.description,
@@ -1479,7 +1024,7 @@ app.get("/api/payment-requests", authenticateToken, async (req, res) => {
 
 app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { 
+  const {
     lines, retentionPercent, advancePercent, isrPercent,
     receptionNumbers, vendorFiscalID, measurementStartDate, measurementEndDate, vendorName
   } = req.body;
@@ -1544,12 +1089,12 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
       const lineRetention = (l.quantity * l.unitPrice) * ((l.retentionPercent || 0) / 100);
       const lineItbisRetention = lineTax * ((l.itbisRetentionPercent || 0) / 100);
       const lineTotal = (l.quantity * l.unitPrice) + lineTax - lineRetention - lineItbisRetention;
-      
+
       subTotal += (l.quantity * l.unitPrice);
       taxAmount += lineTax;
       totalRetentionByLine += lineRetention;
       totalItbisRetention += lineItbisRetention;
-      
+
       return {
         externalItemID: l.externalItemID,
         description: l.description,
@@ -1618,7 +1163,7 @@ app.patch("/api/payment-requests/:id/status", authenticateToken, async (req: any
     if (isNaN(prId)) {
       return res.status(400).json({ message: "ID de boletín inválido" });
     }
-    
+
     // Solo admins o gente de contabilidad puede aprobar
     if (req.user.role !== 'admin' && !req.user.accessContabilidad) {
       return res.status(403).json({ message: "No tiene permiso para aprobar/rechazar boletines" });
@@ -1649,9 +1194,9 @@ app.patch("/api/payment-requests/:id/status", authenticateToken, async (req: any
     res.json(updatedPR);
   } catch (error: any) {
     console.error("Error en PATCH status:", error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: "Error al cambiar el estado del boletín",
-      detail: error.message 
+      detail: error.message
     });
   }
 });
