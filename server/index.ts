@@ -14,6 +14,10 @@ import { sendApprovalEmail, sendNewRequestEmailToAdmin } from "./mail";
 
 dotenv.config();
 
+console.log("----------------------------------------");
+console.log(`DATABASE_URL: ${process.env.DATABASE_URL}`);
+console.log("----------------------------------------");
+
 const app = express();
 // Endpoint para obtener el nombre de la empresa por SubsidiaryID
 app.get("/api/admcloud/subsidiaries/:id", async (req, res) => {
