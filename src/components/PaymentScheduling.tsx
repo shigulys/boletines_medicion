@@ -149,6 +149,18 @@ export const PaymentScheduling: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    const channel = new BroadcastChannel('payment-schedules-refresh');
+    channel.onmessage = (event) => {
+      if (event.data === 'refresh') {
+        fetchData();
+      }
+    };
+    return () => {
+      channel.close();
+    };
+  }, [fetchData]);
+
   const selectedTotal = useMemo(
     () => {
       const editingSchedule = schedules.find((schedule) => schedule.id === editingScheduleId);
@@ -164,8 +176,8 @@ export const PaymentScheduling: React.FC = () => {
       });
 
       return Array.from(requestsMap.values())
-      .filter((request) => selectedRequestIds.includes(request.id))
-      .reduce((sum, request) => sum + (Number(request.netTotal) || 0), 0);
+        .filter((request) => selectedRequestIds.includes(request.id))
+        .reduce((sum, request) => sum + (Number(request.netTotal) || 0), 0);
     },
     [eligibleRequests, schedules, editingScheduleId, selectedRequestIds]
   );
@@ -298,18 +310,18 @@ export const PaymentScheduling: React.FC = () => {
           ? `http://localhost:5000/api/payment-schedules/${editingScheduleId}`
           : 'http://localhost:5000/api/payment-schedules',
         {
-        method: isEditing ? 'PUT' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          paymentRequestIds: selectedRequestIds,
-          commitmentDate,
-          paymentDate,
-          notes
-        })
-      });
+          method: isEditing ? 'PUT' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({
+            paymentRequestIds: selectedRequestIds,
+            commitmentDate,
+            paymentDate,
+            notes
+          })
+        });
 
       const data = await response.json();
       if (!response.ok) {
@@ -318,20 +330,20 @@ export const PaymentScheduling: React.FC = () => {
 
       const updatedScheduleForPdf: PaymentSchedule | null = isEditing
         ? {
-            id: Number(data.id),
-            scheduleNumber: data.scheduleNumber,
-            date: data.date,
-            commitmentDate: data.commitmentDate,
-            paymentDate: data.paymentDate,
-            status: data.status,
-            notes: data.notes,
-            lines: Array.isArray(data.lines)
-              ? data.lines.map((line: { id: number; paymentRequest: PaymentRequest }) => ({
-                  id: line.id,
-                  paymentRequest: line.paymentRequest
-                }))
-              : []
-          }
+          id: Number(data.id),
+          scheduleNumber: data.scheduleNumber,
+          date: data.date,
+          commitmentDate: data.commitmentDate,
+          paymentDate: data.paymentDate,
+          status: data.status,
+          notes: data.notes,
+          lines: Array.isArray(data.lines)
+            ? data.lines.map((line: { id: number; paymentRequest: PaymentRequest }) => ({
+              id: line.id,
+              paymentRequest: line.paymentRequest
+            }))
+            : []
+        }
         : null;
 
       setSelectedRequestIds([]);
@@ -346,6 +358,12 @@ export const PaymentScheduling: React.FC = () => {
       setPaymentDate(getTodayInputDate());
       setError('');
       await fetchData();
+
+      // Notificar a otras pestañas que deben refrescarse
+      const channel = new BroadcastChannel('payment-schedules-refresh');
+      channel.postMessage('refresh');
+      channel.close();
+
       if (isEditing) {
         if (updatedScheduleForPdf) {
           exportScheduleToPDF(updatedScheduleForPdf);
@@ -988,265 +1006,265 @@ export const PaymentScheduling: React.FC = () => {
       </section>
 
       {!isScheduleEditTab && (
-      <section style={{ background: '#fff', borderRadius: '10px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ marginTop: 0, color: '#1976d2' }}>Programaciones Registradas</h3>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <select
-              value={scheduleStatusFilter}
-              onChange={(event) => setScheduleStatusFilter(event.target.value as 'TODOS' | PaymentSchedule['status'])}
-              style={{ border: '1px solid #ddd', borderRadius: '6px', padding: '8px 10px', fontSize: '0.9rem', cursor: 'pointer' }}
-            >
-              <option value="TODOS">Todos ({schedules.length})</option>
-              <option value="PENDIENTE_APROBACION">Pendientes ({schedules.filter((schedule) => schedule.status === 'PENDIENTE_APROBACION').length})</option>
-              <option value="APROBADA">Aprobadas ({schedules.filter((schedule) => schedule.status === 'APROBADA').length})</option>
-              <option value="ENVIADA_FINANZAS">Enviadas ({schedules.filter((schedule) => schedule.status === 'ENVIADA_FINANZAS').length})</option>
-              <option value="CANCELADA">Canceladas ({schedules.filter((schedule) => schedule.status === 'CANCELADA').length})</option>
-            </select>
-            <button
-              onClick={fetchData}
-              style={{ border: 'none', background: '#2196f3', color: 'white', borderRadius: '6px', padding: '8px 12px', cursor: 'pointer' }}
-            >
-              Recargar
-            </button>
-            <button
-              onClick={exportFilteredSchedulesToExcel}
-              style={{ border: 'none', background: '#2e7d32', color: 'white', borderRadius: '6px', padding: '8px 12px', cursor: 'pointer' }}
-            >
-              Exportar filtro Excel
-            </button>
-            <button
-              onClick={exportFilteredSchedulesToPDF}
-              style={{ border: 'none', background: '#546e7a', color: 'white', borderRadius: '6px', padding: '8px 12px', cursor: 'pointer' }}
-            >
-              Exportar filtro PDF
-            </button>
+        <section style={{ background: '#fff', borderRadius: '10px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ marginTop: 0, color: '#1976d2' }}>Programaciones Registradas</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <select
+                value={scheduleStatusFilter}
+                onChange={(event) => setScheduleStatusFilter(event.target.value as 'TODOS' | PaymentSchedule['status'])}
+                style={{ border: '1px solid #ddd', borderRadius: '6px', padding: '8px 10px', fontSize: '0.9rem', cursor: 'pointer' }}
+              >
+                <option value="TODOS">Todos ({schedules.length})</option>
+                <option value="PENDIENTE_APROBACION">Pendientes ({schedules.filter((schedule) => schedule.status === 'PENDIENTE_APROBACION').length})</option>
+                <option value="APROBADA">Aprobadas ({schedules.filter((schedule) => schedule.status === 'APROBADA').length})</option>
+                <option value="ENVIADA_FINANZAS">Enviadas ({schedules.filter((schedule) => schedule.status === 'ENVIADA_FINANZAS').length})</option>
+                <option value="CANCELADA">Canceladas ({schedules.filter((schedule) => schedule.status === 'CANCELADA').length})</option>
+              </select>
+              <button
+                onClick={fetchData}
+                style={{ border: 'none', background: '#2196f3', color: 'white', borderRadius: '6px', padding: '8px 12px', cursor: 'pointer' }}
+              >
+                Recargar
+              </button>
+              <button
+                onClick={exportFilteredSchedulesToExcel}
+                style={{ border: 'none', background: '#2e7d32', color: 'white', borderRadius: '6px', padding: '8px 12px', cursor: 'pointer' }}
+              >
+                Exportar filtro Excel
+              </button>
+              <button
+                onClick={exportFilteredSchedulesToPDF}
+                style={{ border: 'none', background: '#546e7a', color: 'white', borderRadius: '6px', padding: '8px 12px', cursor: 'pointer' }}
+              >
+                Exportar filtro PDF
+              </button>
+            </div>
           </div>
-        </div>
 
-        {loading ? (
-          <p>Cargando programaciones...</p>
-        ) : filteredSchedules.length === 0 ? (
-          <p style={{ color: '#666' }}>No hay programaciones registradas.</p>
-        ) : (
-          <div style={{ display: 'grid', gap: '14px' }}>
-            {filteredSchedules.map((schedule) => {
-              const visibleLines = schedule.lines.filter((line) => line.paymentRequest.status !== 'RECHAZADO');
-              const hasNotApproved = visibleLines.some((line) => line.paymentRequest.status !== 'APROBADO');
-              const totalSchedule = visibleLines.reduce((sum, line) => sum + (Number(line.paymentRequest.netTotal) || 0), 0);
-              const hiddenRejectedCount = schedule.lines.length - visibleLines.length;
+          {loading ? (
+            <p>Cargando programaciones...</p>
+          ) : filteredSchedules.length === 0 ? (
+            <p style={{ color: '#666' }}>No hay programaciones registradas.</p>
+          ) : (
+            <div style={{ display: 'grid', gap: '14px' }}>
+              {filteredSchedules.map((schedule) => {
+                const visibleLines = schedule.lines.filter((line) => line.paymentRequest.status !== 'RECHAZADO');
+                const hasNotApproved = visibleLines.some((line) => line.paymentRequest.status !== 'APROBADO');
+                const totalSchedule = visibleLines.reduce((sum, line) => sum + (Number(line.paymentRequest.netTotal) || 0), 0);
+                const hiddenRejectedCount = schedule.lines.length - visibleLines.length;
 
-              return (
-                <article key={schedule.id} style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '14px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                    <div>
-                      <strong style={{ color: '#1565c0' }}>{schedule.scheduleNumber}</strong>
-                      <div style={{ color: '#666', fontSize: '0.9rem' }}>{new Date(schedule.date).toLocaleDateString('es-DO')}</div>
-                      <div style={{ color: '#666', fontSize: '0.9rem' }}>
-                        Compromiso: {new Date(schedule.commitmentDate).toLocaleDateString('es-DO')}
-                      </div>
-                      <div style={{ color: '#666', fontSize: '0.9rem' }}>
-                        Pago/Fondos: {new Date(schedule.paymentDate).toLocaleDateString('es-DO')}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span style={{
-                        borderRadius: '999px',
-                        padding: '4px 10px',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        background: schedule.status === 'ENVIADA_FINANZAS'
-                          ? '#e8f5e9'
-                          : schedule.status === 'APROBADA'
-                            ? '#e3f2fd'
-                            : schedule.status === 'CANCELADA'
-                              ? '#ffebee'
-                              : '#fff3e0',
-                        color: schedule.status === 'ENVIADA_FINANZAS'
-                          ? '#1b5e20'
-                          : schedule.status === 'APROBADA'
-                            ? '#0d47a1'
-                            : schedule.status === 'CANCELADA'
-                              ? '#b71c1c'
-                              : '#e65100',
-                        border: schedule.status === 'ENVIADA_FINANZAS'
-                          ? '1px solid #c8e6c9'
-                          : schedule.status === 'APROBADA'
-                            ? '1px solid #bbdefb'
-                            : schedule.status === 'CANCELADA'
-                              ? '1px solid #ffcdd2'
-                              : '1px solid #ffcc80'
-                      }}>
-                        {statusLabel(schedule.status)}
-                      </span>
-
-                      {schedule.status === 'PENDIENTE_APROBACION' && canApprovePaymentRequests && (
-                        <button
-                          onClick={() => approveSchedule(schedule.id)}
-                          disabled={hasNotApproved}
-                          title={hasNotApproved ? 'No se puede aprobar: hay boletines pendientes' : 'Aprobar programación'}
-                          style={{
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '8px 12px',
-                            background: hasNotApproved ? '#90a4ae' : '#2e7d32',
-                            color: 'white',
-                            cursor: hasNotApproved ? 'not-allowed' : 'pointer'
-                          }}
-                        >
-                          Aprobar
-                        </button>
-                      )}
-
-                      {schedule.status === 'APROBADA' && canApprovePaymentRequests && (
-                        <button
-                          onClick={() => sendToFinance(schedule.id)}
-                          style={{ border: 'none', borderRadius: '6px', padding: '8px 12px', background: '#6a1b9a', color: 'white', cursor: 'pointer' }}
-                        >
-                          Enviar a Finanzas
-                        </button>
-                      )}
-
-                      {(schedule.status === 'APROBADA' || schedule.status === 'ENVIADA_FINANZAS') && canApprovePaymentRequests && (
-                        <button
-                          onClick={() => restartScheduleFlow(schedule)}
-                          style={{ border: 'none', borderRadius: '6px', padding: '8px 12px', background: '#8e24aa', color: 'white', cursor: 'pointer' }}
-                        >
-                          Reiniciar Flujo
-                        </button>
-                      )}
-
-                      {(schedule.status === 'PENDIENTE_APROBACION' || schedule.status === 'APROBADA') && canApprovePaymentRequests && (
-                        <button
-                          onClick={() => window.open(`/?paymentScheduleEdit=${schedule.id}`, '_blank')}
-                          style={{ border: 'none', borderRadius: '6px', padding: '8px 12px', background: '#ef6c00', color: 'white', cursor: 'pointer' }}
-                        >
-                          Editar
-                        </button>
-                      )}
-
-                      {(schedule.status === 'PENDIENTE_APROBACION' || schedule.status === 'APROBADA') && canApprovePaymentRequests && (
-                        <button
-                          onClick={() => cancelSchedule(schedule.id)}
-                          style={{ border: 'none', borderRadius: '6px', padding: '8px 12px', background: '#c62828', color: 'white', cursor: 'pointer' }}
-                        >
-                          Cancelar
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => exportScheduleToExcel(schedule)}
-                        style={{ border: 'none', borderRadius: '6px', padding: '8px 12px', background: '#2e7d32', color: 'white', cursor: 'pointer' }}
-                      >
-                        Excel
-                      </button>
-
-                      <button
-                        onClick={() => exportScheduleToPDF(schedule)}
-                        style={{ border: 'none', borderRadius: '6px', padding: '8px 12px', background: '#546e7a', color: 'white', cursor: 'pointer' }}
-                      >
-                        PDF
-                      </button>
-                    </div>
-                  </div>
-
-                  {schedule.notes && (
-                    <p style={{ margin: '10px 0 0 0', color: '#555', fontSize: '0.9rem' }}>{schedule.notes}</p>
-                  )}
-
-                  {hasNotApproved && (
-                    <div style={{ marginTop: '10px', padding: '8px 10px', borderRadius: '6px', border: '1px solid #ffcc80', background: '#fff8e1', color: '#e65100', fontSize: '0.85rem' }}>
-                      Esta programación contiene boletines no aprobados. Deben aprobarse antes del envío a finanzas.
-                    </div>
-                  )}
-
-                  {hiddenRejectedCount > 0 && (
-                    <div style={{ marginTop: '10px', padding: '8px 10px', borderRadius: '6px', border: '1px solid #ffcdd2', background: '#ffebee', color: '#b71c1c', fontSize: '0.85rem' }}>
-                      Se ocultaron {hiddenRejectedCount} boletín(es) rechazado(s) en esta vista.
-                    </div>
-                  )}
-
-                  <div style={{ marginTop: '12px', overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
-                      <thead>
-                        <tr>
-                          <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Boletín</th>
-                          <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Proveedor</th>
-                          <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Proyecto</th>
-                          <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'right' }}>Neto</th>
-                          <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'center' }}>Estado</th>
-                          {canApprovePaymentRequests && (
-                            <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'center' }}>Acción</th>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visibleLines.map((line) => {
-                          const request = line.paymentRequest;
-                          const notApproved = request.status !== 'APROBADO';
-                          return (
-                            <tr key={line.id} style={{ backgroundColor: notApproved ? '#fff8e1' : 'transparent' }}>
-                              <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0', fontWeight: 600 }}>{request.docNumber}</td>
-                              <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0' }}>{request.vendorName}</td>
-                              <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0' }}>{request.projectName || 'Sin proyecto'}</td>
-                              <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0', textAlign: 'right' }}>${formatCurrency(request.netTotal)}</td>
-                              <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}>{request.status}</td>
-                              {canApprovePaymentRequests && (
-                                <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}>
-                                  {request.status === 'PENDIENTE' ? (
-                                    <button
-                                      onClick={() => approvePaymentRequest(request.id)}
-                                      disabled={approvingRequestId === request.id}
-                                      style={{
-                                        border: 'none',
-                                        borderRadius: '6px',
-                                        padding: '6px 10px',
-                                        background: approvingRequestId === request.id ? '#90a4ae' : '#2e7d32',
-                                        color: 'white',
-                                        cursor: approvingRequestId === request.id ? 'not-allowed' : 'pointer'
-                                      }}
-                                    >
-                                      {approvingRequestId === request.id ? 'Aprobando...' : 'Aprobar'}
-                                    </button>
-                                  ) : (
-                                    <span style={{ color: '#607d8b', fontSize: '0.85rem' }}>—</span>
-                                  )}
-                                </td>
-                              )}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot>
-                        <tr>
-                          <td colSpan={canApprovePaymentRequests ? 4 : 3} style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700 }}>Total programación:</td>
-                          <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700 }}>${formatCurrency(totalSchedule)}</td>
-                          <td />
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-
-                  {Array.isArray(schedule.auditLogs) && schedule.auditLogs.length > 0 && (
-                    <div style={{ marginTop: '12px', background: '#fafafa', border: '1px solid #eceff1', borderRadius: '6px', padding: '10px 12px' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#455a64', marginBottom: '6px' }}>
-                        Auditoría reciente
-                      </div>
-                      {schedule.auditLogs.slice(0, 5).map((log) => (
-                        <div key={log.id} style={{ fontSize: '0.8rem', color: '#607d8b', marginBottom: '4px' }}>
-                          {new Date(log.createdAt).toLocaleString('es-DO')} · {actionLabel(log.action)} · {log.createdBy || 'Sistema'}
-                          {log.statusBefore || log.statusAfter ? ` (${log.statusBefore || '-'} → ${log.statusAfter || '-'})` : ''}
-                          {log.detail ? ` · ${log.detail}` : ''}
+                return (
+                  <article key={schedule.id} style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                      <div>
+                        <strong style={{ color: '#1565c0' }}>{schedule.scheduleNumber}</strong>
+                        <div style={{ color: '#666', fontSize: '0.9rem' }}>{new Date(schedule.date).toLocaleDateString('es-DO')}</div>
+                        <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                          Compromiso: {new Date(schedule.commitmentDate).toLocaleDateString('es-DO')}
                         </div>
-                      ))}
+                        <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                          Pago/Fondos: {new Date(schedule.paymentDate).toLocaleDateString('es-DO')}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{
+                          borderRadius: '999px',
+                          padding: '4px 10px',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          background: schedule.status === 'ENVIADA_FINANZAS'
+                            ? '#e8f5e9'
+                            : schedule.status === 'APROBADA'
+                              ? '#e3f2fd'
+                              : schedule.status === 'CANCELADA'
+                                ? '#ffebee'
+                                : '#fff3e0',
+                          color: schedule.status === 'ENVIADA_FINANZAS'
+                            ? '#1b5e20'
+                            : schedule.status === 'APROBADA'
+                              ? '#0d47a1'
+                              : schedule.status === 'CANCELADA'
+                                ? '#b71c1c'
+                                : '#e65100',
+                          border: schedule.status === 'ENVIADA_FINANZAS'
+                            ? '1px solid #c8e6c9'
+                            : schedule.status === 'APROBADA'
+                              ? '1px solid #bbdefb'
+                              : schedule.status === 'CANCELADA'
+                                ? '1px solid #ffcdd2'
+                                : '1px solid #ffcc80'
+                        }}>
+                          {statusLabel(schedule.status)}
+                        </span>
+
+                        {schedule.status === 'PENDIENTE_APROBACION' && canApprovePaymentRequests && (
+                          <button
+                            onClick={() => approveSchedule(schedule.id)}
+                            disabled={hasNotApproved}
+                            title={hasNotApproved ? 'No se puede aprobar: hay boletines pendientes' : 'Aprobar programación'}
+                            style={{
+                              border: 'none',
+                              borderRadius: '6px',
+                              padding: '8px 12px',
+                              background: hasNotApproved ? '#90a4ae' : '#2e7d32',
+                              color: 'white',
+                              cursor: hasNotApproved ? 'not-allowed' : 'pointer'
+                            }}
+                          >
+                            Aprobar
+                          </button>
+                        )}
+
+                        {schedule.status === 'APROBADA' && canApprovePaymentRequests && (
+                          <button
+                            onClick={() => sendToFinance(schedule.id)}
+                            style={{ border: 'none', borderRadius: '6px', padding: '8px 12px', background: '#6a1b9a', color: 'white', cursor: 'pointer' }}
+                          >
+                            Enviar a Finanzas
+                          </button>
+                        )}
+
+                        {(schedule.status === 'APROBADA' || schedule.status === 'ENVIADA_FINANZAS') && canApprovePaymentRequests && (
+                          <button
+                            onClick={() => restartScheduleFlow(schedule)}
+                            style={{ border: 'none', borderRadius: '6px', padding: '8px 12px', background: '#8e24aa', color: 'white', cursor: 'pointer' }}
+                          >
+                            Reiniciar Flujo
+                          </button>
+                        )}
+
+                        {(schedule.status === 'PENDIENTE_APROBACION' || schedule.status === 'APROBADA') && canApprovePaymentRequests && (
+                          <button
+                            onClick={() => window.open(`/?paymentScheduleEdit=${schedule.id}`, '_blank')}
+                            style={{ border: 'none', borderRadius: '6px', padding: '8px 12px', background: '#ef6c00', color: 'white', cursor: 'pointer' }}
+                          >
+                            Editar
+                          </button>
+                        )}
+
+                        {(schedule.status === 'PENDIENTE_APROBACION' || schedule.status === 'APROBADA') && canApprovePaymentRequests && (
+                          <button
+                            onClick={() => cancelSchedule(schedule.id)}
+                            style={{ border: 'none', borderRadius: '6px', padding: '8px 12px', background: '#c62828', color: 'white', cursor: 'pointer' }}
+                          >
+                            Cancelar
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => exportScheduleToExcel(schedule)}
+                          style={{ border: 'none', borderRadius: '6px', padding: '8px 12px', background: '#2e7d32', color: 'white', cursor: 'pointer' }}
+                        >
+                          Excel
+                        </button>
+
+                        <button
+                          onClick={() => exportScheduleToPDF(schedule)}
+                          style={{ border: 'none', borderRadius: '6px', padding: '8px 12px', background: '#546e7a', color: 'white', cursor: 'pointer' }}
+                        >
+                          PDF
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
+
+                    {schedule.notes && (
+                      <p style={{ margin: '10px 0 0 0', color: '#555', fontSize: '0.9rem' }}>{schedule.notes}</p>
+                    )}
+
+                    {hasNotApproved && (
+                      <div style={{ marginTop: '10px', padding: '8px 10px', borderRadius: '6px', border: '1px solid #ffcc80', background: '#fff8e1', color: '#e65100', fontSize: '0.85rem' }}>
+                        Esta programación contiene boletines no aprobados. Deben aprobarse antes del envío a finanzas.
+                      </div>
+                    )}
+
+                    {hiddenRejectedCount > 0 && (
+                      <div style={{ marginTop: '10px', padding: '8px 10px', borderRadius: '6px', border: '1px solid #ffcdd2', background: '#ffebee', color: '#b71c1c', fontSize: '0.85rem' }}>
+                        Se ocultaron {hiddenRejectedCount} boletín(es) rechazado(s) en esta vista.
+                      </div>
+                    )}
+
+                    <div style={{ marginTop: '12px', overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Boletín</th>
+                            <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Proveedor</th>
+                            <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Proyecto</th>
+                            <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'right' }}>Neto</th>
+                            <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'center' }}>Estado</th>
+                            {canApprovePaymentRequests && (
+                              <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'center' }}>Acción</th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visibleLines.map((line) => {
+                            const request = line.paymentRequest;
+                            const notApproved = request.status !== 'APROBADO';
+                            return (
+                              <tr key={line.id} style={{ backgroundColor: notApproved ? '#fff8e1' : 'transparent' }}>
+                                <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0', fontWeight: 600 }}>{request.docNumber}</td>
+                                <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0' }}>{request.vendorName}</td>
+                                <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0' }}>{request.projectName || 'Sin proyecto'}</td>
+                                <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0', textAlign: 'right' }}>${formatCurrency(request.netTotal)}</td>
+                                <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}>{request.status}</td>
+                                {canApprovePaymentRequests && (
+                                  <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}>
+                                    {request.status === 'PENDIENTE' ? (
+                                      <button
+                                        onClick={() => approvePaymentRequest(request.id)}
+                                        disabled={approvingRequestId === request.id}
+                                        style={{
+                                          border: 'none',
+                                          borderRadius: '6px',
+                                          padding: '6px 10px',
+                                          background: approvingRequestId === request.id ? '#90a4ae' : '#2e7d32',
+                                          color: 'white',
+                                          cursor: approvingRequestId === request.id ? 'not-allowed' : 'pointer'
+                                        }}
+                                      >
+                                        {approvingRequestId === request.id ? 'Aprobando...' : 'Aprobar'}
+                                      </button>
+                                    ) : (
+                                      <span style={{ color: '#607d8b', fontSize: '0.85rem' }}>—</span>
+                                    )}
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <td colSpan={canApprovePaymentRequests ? 4 : 3} style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700 }}>Total programación:</td>
+                            <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700 }}>${formatCurrency(totalSchedule)}</td>
+                            <td />
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+
+                    {Array.isArray(schedule.auditLogs) && schedule.auditLogs.length > 0 && (
+                      <div style={{ marginTop: '12px', background: '#fafafa', border: '1px solid #eceff1', borderRadius: '6px', padding: '10px 12px' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#455a64', marginBottom: '6px' }}>
+                          Auditoría reciente
+                        </div>
+                        {schedule.auditLogs.slice(0, 5).map((log) => (
+                          <div key={log.id} style={{ fontSize: '0.8rem', color: '#607d8b', marginBottom: '4px' }}>
+                            {new Date(log.createdAt).toLocaleString('es-DO')} · {actionLabel(log.action)} · {log.createdBy || 'Sistema'}
+                            {log.statusBefore || log.statusAfter ? ` (${log.statusBefore || '-'} → ${log.statusAfter || '-'})` : ''}
+                            {log.detail ? ` · ${log.detail}` : ''}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
       )}
     </div>
   );
