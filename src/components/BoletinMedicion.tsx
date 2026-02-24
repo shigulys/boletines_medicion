@@ -147,9 +147,9 @@ export const BoletinMedicion: React.FC = () => {
         localStorage.removeItem('boletinUpdated'); // Limpiar el flag
       }
     };
-    
+
     window.addEventListener('storage', handleStorageChange);
-    
+
     return () => {
       window.removeEventListener('storage', handleStorageChange);
     };
@@ -168,7 +168,7 @@ export const BoletinMedicion: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     const editId = params.get('editBoletin');
     const genId = params.get('generateBoletin');
-    
+
     if (editId && savedBoletines.length > 0) {
       const b = savedBoletines.find(x => x.id === Number(editId));
       if (b && editingId !== b.id) {
@@ -197,19 +197,19 @@ export const BoletinMedicion: React.FC = () => {
 
   const handleStatusChange = async (id: number, status: string) => {
     const action = status === 'APROBADO' ? 'aprobar' : 'rechazar';
-    
+
     let rejectionReason = '';
-    
+
     // Si es rechazo, capturar el motivo
     if (status === 'RECHAZADO') {
       rejectionReason = prompt('Ingrese el motivo del rechazo:')?.trim() || '';
-      
+
       if (!rejectionReason) {
         alert('Debe proporcionar un motivo para el rechazo');
         return;
       }
     }
-    
+
     if (!confirm(`¿Está seguro que desea ${action} este boletín?`)) return;
 
     try {
@@ -217,7 +217,7 @@ export const BoletinMedicion: React.FC = () => {
       if (status === 'RECHAZADO') {
         body.rejectionReason = rejectionReason;
       }
-      
+
       const response = await fetch(`http://localhost:5000/api/payment-requests/${id}/status`, {
         method: 'PATCH',
         headers: {
@@ -241,7 +241,7 @@ export const BoletinMedicion: React.FC = () => {
 
   const handleGeneratePDF = async (boletin: any) => {
     let boletinWithDates = { ...boletin };
-    
+
     // Si el boletín no tiene fechas de medición, intentar obtenerlas de AdmCloud
     if ((!boletin.measurementStartDate || !boletin.measurementEndDate) && boletin.externalTxID) {
       try {
@@ -249,7 +249,7 @@ export const BoletinMedicion: React.FC = () => {
         const receptionsResponse = await fetch(`http://localhost:5000/api/admcloud/transactions/${boletin.externalTxID}/receptions`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
-        
+
         if (receptionsResponse.ok) {
           const receptions = await receptionsResponse.json();
           const receptionWithDates = receptions.find((r: any) => r.MeasurementStartDate && r.MeasurementEndDate);
@@ -263,7 +263,7 @@ export const BoletinMedicion: React.FC = () => {
         console.error('Error al obtener fechas de medición:', error);
       }
     }
-    
+
     generatePDF(boletinWithDates);
   };
 
@@ -350,23 +350,23 @@ export const BoletinMedicion: React.FC = () => {
       const token = localStorage.getItem('token');
       console.log('🔑 Fetching transactions with token:', token ? 'Present' : 'Missing');
       console.log('🔍 filterSubcontratos:', filterSubcontratos);
-      
+
       const url = new URL('http://localhost:5000/api/admcloud/transactions');
       if (filterSubcontratos) {
         url.searchParams.append('departmentFilter', 'subcontratos');
         console.log('✅ Agregando filtro de Subcontratos a la URL');
       }
-      
+
       console.log('📡 URL final:', url.toString());
-      
+
       const response = await fetch(url.toString(), {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       console.log('📡 Response status:', response.status);
-      
+
       if (response.ok) {
         const data = await response.json();
         console.log('✅ Transactions loaded:', data.length);
@@ -400,11 +400,11 @@ export const BoletinMedicion: React.FC = () => {
       const receptionsResponse = await fetch(`http://localhost:5000/api/admcloud/transactions/${tx.ID}/receptions`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
-      
+
       if (receptionsResponse.ok) {
         const receptions = await receptionsResponse.json();
         console.log('📦 Recepciones obtenidas:', receptions.length);
-        
+
         // Buscar la primera recepción con fechas de medición
         const receptionWithDates = receptions.find((r: any) => r.MeasurementStartDate && r.MeasurementEndDate);
         if (receptionWithDates) {
@@ -417,7 +417,7 @@ export const BoletinMedicion: React.FC = () => {
           setMeasurementEndDate(null);
         }
       }
-      
+
       // Consultar items de la OC
       const response = await fetch(`http://localhost:5000/api/admcloud/transactions/${tx.ID}/items`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
@@ -426,7 +426,7 @@ export const BoletinMedicion: React.FC = () => {
         const data = await response.json();
         setItems(data);
         const previousUnitsByItem = getLastUnitsByItem(tx.ID);
-        
+
         // Pre-poblar lineas con cantidad pendiente (Recibida - Ya solicitada en otros boletines)
         const initialLines = data.map((it: any) => {
           const available = it.ReceivedQuantity - it.PaidQuantity;
@@ -434,14 +434,14 @@ export const BoletinMedicion: React.FC = () => {
           const allReceptions = it.ReceptionNumbers || '';
           const receptionArray = allReceptions.split(',').map((r: string) => r.trim()).filter((r: string) => r);
           const lastReception = receptionArray.length > 0 ? receptionArray[receptionArray.length - 1] : '';
-          
+
           return {
             externalItemID: it.ItemID,
             description: it.Name,
             unitOfMeasure: previousUnitsByItem.get(it.ItemID) || '',
             previousUnitOfMeasure: previousUnitsByItem.get(it.ItemID) || '',
             receptionNumbers: lastReception,
-            quantity: available > 0 ? available : 0, 
+            quantity: available > 0 ? available : 0,
             unitPrice: it.Price,
             taxType: 'ITBIS 18%',
             taxPercent: 18,
@@ -470,7 +470,7 @@ export const BoletinMedicion: React.FC = () => {
     setMeasurementStartDate(boletin.measurementStartDate || null);
     setMeasurementEndDate(boletin.measurementEndDate || null);
     setHasUnsavedChanges(false); // Cargando datos guardados
-    
+
     // Buscar la transacción original en el listado
     const tx = transactions.find(t => t.ID === boletin.externalTxID);
     if (tx) {
@@ -499,7 +499,7 @@ export const BoletinMedicion: React.FC = () => {
         const receptionsResponse = await fetch(`http://localhost:5000/api/admcloud/transactions/${boletin.externalTxID}/receptions`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
-        
+
         if (receptionsResponse.ok) {
           const receptions = await receptionsResponse.json();
           const receptionWithDates = receptions.find((r: any) => r.MeasurementStartDate && r.MeasurementEndDate);
@@ -509,12 +509,12 @@ export const BoletinMedicion: React.FC = () => {
           }
         }
       }
-      
+
       // Obtener los datos completos de la transacción desde AdmCloud para tener el FiscalID actualizado
       const txResponse = await fetch(`http://localhost:5000/api/admcloud/transactions/${boletin.externalTxID}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
-      
+
       if (txResponse.ok) {
         const fullTx = await txResponse.json();
         if (fullTx.VendorFiscalID) {
@@ -522,7 +522,7 @@ export const BoletinMedicion: React.FC = () => {
           setSelectedTx((prev: any) => ({ ...prev, VendorFiscalID: fullTx.VendorFiscalID }));
         }
       }
-      
+
       const response = await fetch(`http://localhost:5000/api/admcloud/transactions/${boletin.externalTxID}/items`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
@@ -530,7 +530,7 @@ export const BoletinMedicion: React.FC = () => {
         const ocItems = await response.json();
         setItems(ocItems);
         const previousUnitsByItem = getLastUnitsByItem(boletin.externalTxID, boletin.id);
-        
+
         // Mapear items de la OC, marcando seleccionados los que ya estaban en el boletín
         const initialLines = ocItems.map((it: TransactionItem) => {
           const existingLine = boletin.lines.find((l: any) => l.externalItemID === it.ItemID);
@@ -582,7 +582,7 @@ export const BoletinMedicion: React.FC = () => {
     } else {
       newLines[index] = { ...newLines[index], [field]: value };
     }
-    
+
     // Calcular automáticamente el impuesto cuando se selecciona una línea
     if (field === 'selected' && value === true) {
       const line = newLines[index];
@@ -596,7 +596,7 @@ export const BoletinMedicion: React.FC = () => {
         unitOfMeasure: currentUnit || previousUnit || line.unitOfMeasure
       };
     }
-    
+
     setLinesToPay(newLines);
     setHasUnsavedChanges(true);
   };
@@ -613,7 +613,7 @@ export const BoletinMedicion: React.FC = () => {
       const tax = st * (l.taxPercent / 100);
       const retentionByLine = st * ((l.retentionPercent || 0) / 100);
       const itbisRetention = tax * ((l.itbisRetentionPercent || 0) / 100);
-      
+
       subTotal += st;
       totalTax += tax;
       totalRetentionByLine += retentionByLine;
@@ -631,22 +631,22 @@ export const BoletinMedicion: React.FC = () => {
   const getRetentionsSummary = () => {
     const selected = linesToPay.filter(l => l.selected && l.retentionPercent > 0);
     const summary: { [key: string]: { name: string; percent: number; total: number } } = {};
-    
+
     selected.forEach(line => {
       const retention = availableRetentions.find(r => r.percentage === line.retentionPercent);
       const retentionName = retention ? retention.name : `Retención ${line.retentionPercent}%`;
       const key = `${line.retentionPercent}`;
-      
+
       const st = line.quantity * line.unitPrice;
       const tax = st * (line.taxPercent / 100);
       const retentionAmount = st * (line.retentionPercent / 100);
-      
+
       if (!summary[key]) {
         summary[key] = { name: retentionName, percent: line.retentionPercent, total: 0 };
       }
       summary[key].total += retentionAmount;
     });
-    
+
     return Object.values(summary);
   };
 
@@ -670,30 +670,30 @@ export const BoletinMedicion: React.FC = () => {
 
     // Validación de duplicidad/exceso
     for (let i = 0; i < linesToPay.length; i++) {
-        const line = linesToPay[i];
-        if (!line.selected) continue;
+      const line = linesToPay[i];
+      if (!line.selected) continue;
 
-        const item = items[i];
-        const existingInThisBoletin = editingId ? (savedBoletines.find(b => b.id === editingId)?.lines.find((l: any) => l.externalItemID === line.externalItemID)?.quantity || 0) : 0;
-        const paidByOthers = (item?.PaidQuantity || 0) - existingInThisBoletin;
-        const available = (item?.ReceivedQuantity || 0) - paidByOthers;
+      const item = items[i];
+      const existingInThisBoletin = editingId ? (savedBoletines.find(b => b.id === editingId)?.lines.find((l: any) => l.externalItemID === line.externalItemID)?.quantity || 0) : 0;
+      const paidByOthers = (item?.PaidQuantity || 0) - existingInThisBoletin;
+      const available = (item?.ReceivedQuantity || 0) - paidByOthers;
 
-        if (line.quantity > (available + 0.0001)) {
-            alert(`Error: La partida "${line.description}" excede la cantidad disponible para pago (Máximo disponible: ${available}).`);
-            return;
-        }
+      if (line.quantity > (available + 0.0001)) {
+        alert(`Error: La partida "${line.description}" excede la cantidad disponible para pago (Máximo disponible: ${available}).`);
+        return;
+      }
 
-        const normalizedUnit = normalizeUnitOfMeasure(line.unitOfMeasure);
-        if (!normalizedUnit) {
-          alert(`Error: Debe indicar la unidad de medida para la partida "${line.description}".`);
-          return;
-        }
+      const normalizedUnit = normalizeUnitOfMeasure(line.unitOfMeasure);
+      if (!normalizedUnit) {
+        alert(`Error: Debe indicar la unidad de medida para la partida "${line.description}".`);
+        return;
+      }
 
-        const previousUnit = normalizeUnitOfMeasure(line.previousUnitOfMeasure);
-        if (previousUnit && previousUnit !== normalizedUnit) {
-          alert(`Error: La partida "${line.description}" debe usar la unidad "${previousUnit}" del boletín anterior.`);
-          return;
-        }
+      const previousUnit = normalizeUnitOfMeasure(line.previousUnitOfMeasure);
+      if (previousUnit && previousUnit !== normalizedUnit) {
+        alert(`Error: La partida "${line.description}" debe usar la unidad "${previousUnit}" del boletín anterior.`);
+        return;
+      }
     }
 
     const linesPayload = selectedLines.map((line) => ({
@@ -709,7 +709,7 @@ export const BoletinMedicion: React.FC = () => {
 
     setIsSaving(true);
     try {
-      const url = editingId 
+      const url = editingId
         ? `http://localhost:5000/api/payment-requests/${editingId}`
         : 'http://localhost:5000/api/payment-requests';
       const method = editingId ? 'PUT' : 'POST';
@@ -737,14 +737,24 @@ export const BoletinMedicion: React.FC = () => {
       });
 
       if (response.ok) {
+        const savedPR = await response.json();
         alert(editingId ? "Boletín actualizado con éxito" : "Boletín generado con éxito");
         setHasUnsavedChanges(false);
-        
+
+        // Actualizar el estado local con el boletín guardado/actualizado para reflejar cambios (como cubicacionNo)
+        setSavedBoletines(prev => {
+          if (editingId) {
+            return prev.map(b => b.id === editingId ? savedPR : b);
+          } else {
+            return [savedPR, ...prev];
+          }
+        });
+
         // Notificar a otras ventanas que se actualizó un boletín
         localStorage.setItem('boletinUpdated', Date.now().toString());
-        
+
         if (isNewTab) {
-          // Esperar un momento para que el mensaje se propague antes de cerrar
+          // Esperar un momento para que el mensaje se propaque antes de cerrar
           setTimeout(() => {
             window.close();
           }, 500);
@@ -770,11 +780,11 @@ export const BoletinMedicion: React.FC = () => {
   const exportToExcel = async () => {
     // Mostrar estado de carga
     setLoading(true);
-    
+
     try {
       // Preparar datos para la primera hoja (resumen de órdenes)
       const data: any[] = [];
-      
+
       // Por cada proyecto, agregar sus órdenes
       Object.entries(groupedTransactions).forEach(([projectName, txs], index) => {
         // Filas de órdenes del proyecto
@@ -782,18 +792,18 @@ export const BoletinMedicion: React.FC = () => {
           // Determinar moneda - verificar múltiples formatos posibles
           let moneda = 'DOP'; // Por defecto
           const currencyValue = String(tx.Currency || '').trim().toUpperCase();
-          
+
           // USD puede venir como: '2', 'USD', o GUID específico
-          if (currencyValue === '2' || currencyValue === 'USD' || 
-              currencyValue === 'B99EF67E-9001-4BAA-ADCE-08DDAA50AC6E') {
+          if (currencyValue === '2' || currencyValue === 'USD' ||
+            currencyValue === 'B99EF67E-9001-4BAA-ADCE-08DDAA50AC6E') {
             moneda = 'USD';
           }
           // DOP puede venir como: '1', 'DOP', o GUID específico  
-          else if (currencyValue === '1' || currencyValue === 'DOP' || 
-                   currencyValue === 'F5825D92-D608-4B7B-ADCD-08DDAA50AC6E') {
+          else if (currencyValue === '1' || currencyValue === 'DOP' ||
+            currencyValue === 'F5825D92-D608-4B7B-ADCD-08DDAA50AC6E') {
             moneda = 'DOP';
           }
-          
+
           data.push({
             'Proyecto': txIndex === 0 ? projectName : '', // Solo mostrar nombre del proyecto en la primera fila
             'Doc ID': tx.DocID,
@@ -805,7 +815,7 @@ export const BoletinMedicion: React.FC = () => {
             'Total OC': tx.TotalAmount // Número directo, no formateado
           });
         });
-        
+
         // Fila vacía entre proyectos (excepto después del último)
         if (index < Object.keys(groupedTransactions).length - 1) {
           data.push({
@@ -819,7 +829,7 @@ export const BoletinMedicion: React.FC = () => {
           });
         }
       });
-      
+
       // Fila vacía antes del total
       data.push({
         'Proyecto': '',
@@ -831,22 +841,22 @@ export const BoletinMedicion: React.FC = () => {
         'Tasa Cambio': '',
         'Total OC': null
       });
-      
+
       // Calcular totales por moneda
-      const totalesPorMoneda = filteredTxs.reduce((acc: {DOP: number, USD: number, count: number}, tx) => {
+      const totalesPorMoneda = filteredTxs.reduce((acc: { DOP: number, USD: number, count: number }, tx) => {
         const currencyValue = String(tx.Currency || '').trim().toUpperCase();
         let moneda = 'DOP';
-        
-        if (currencyValue === '2' || currencyValue === 'USD' || 
-            currencyValue === 'B99EF67E-9001-4BAA-ADCE-08DDAA50AC6E') {
+
+        if (currencyValue === '2' || currencyValue === 'USD' ||
+          currencyValue === 'B99EF67E-9001-4BAA-ADCE-08DDAA50AC6E') {
           moneda = 'USD';
         }
-        
+
         acc[moneda as 'DOP' | 'USD'] += tx.TotalAmount;
         acc.count++;
         return acc;
-      }, {DOP: 0, USD: 0, count: 0});
-      
+      }, { DOP: 0, USD: 0, count: 0 });
+
       // Total en DOP
       if (totalesPorMoneda.DOP > 0) {
         data.push({
@@ -860,7 +870,7 @@ export const BoletinMedicion: React.FC = () => {
           'Total OC': totalesPorMoneda.DOP
         });
       }
-      
+
       // Total en USD
       if (totalesPorMoneda.USD > 0) {
         data.push({
@@ -874,7 +884,7 @@ export const BoletinMedicion: React.FC = () => {
           'Total OC': totalesPorMoneda.USD
         });
       }
-      
+
       // Fila en blanco
       data.push({
         'Proyecto': '',
@@ -886,7 +896,7 @@ export const BoletinMedicion: React.FC = () => {
         'Tasa Cambio': '',
         'Total OC': null
       });
-      
+
       // Total general (informativo)
       const totalGeneral = filteredTxs.reduce((sum, tx) => sum + tx.TotalAmount, 0);
       data.push({
@@ -899,10 +909,10 @@ export const BoletinMedicion: React.FC = () => {
         'Tasa Cambio': '',
         'Total OC': totalGeneral // Número directo
       });
-      
+
       // Crear hoja de cálculo para resumen
       const ws = XLSX.utils.json_to_sheet(data);
-      
+
       // Establecer anchos de columnas para resumen
       ws['!cols'] = [
         { wch: 40 }, // Proyecto
@@ -914,7 +924,7 @@ export const BoletinMedicion: React.FC = () => {
         { wch: 12 }, // Tasa Cambio
         { wch: 18 }  // Total OC
       ];
-      
+
       // Obtener los items de todas las órdenes en paralelo
       console.log('📥 Obteniendo items de las órdenes...');
       const itemsPromises = filteredTxs.map(async (tx) => {
@@ -935,21 +945,21 @@ export const BoletinMedicion: React.FC = () => {
           return [];
         }
       });
-      
+
       const allItemsWithTx = await Promise.all(itemsPromises);
       const flattenedItems = allItemsWithTx.flat();
-      
+
       console.log(`✅ Se obtuvieron ${flattenedItems.length} items de ${filteredTxs.length} órdenes`);
-      
+
       // Log para verificar valores de Currency
       const currencyValues = new Set(filteredTxs.map(tx => tx.Currency));
       console.log('💰 Valores únicos de Currency encontrados:', Array.from(currencyValues));
       filteredTxs.forEach(tx => {
         console.log(`📋 ${tx.DocID}: Currency = "${tx.Currency}" (type: ${typeof tx.Currency}), TotalAmount = ${tx.TotalAmount}, TaxAmount = ${tx.TaxAmount}`);
       });
-      
+
       // Agrupar items por transacción para calcular totales
-      const itemsByTransaction = new Map<string, Array<{transaction: Transaction, item: TransactionItem}>>();
+      const itemsByTransaction = new Map<string, Array<{ transaction: Transaction, item: TransactionItem }>>();
       flattenedItems.forEach(({ transaction, item }) => {
         const key = transaction.ID;
         if (!itemsByTransaction.has(key)) {
@@ -957,36 +967,36 @@ export const BoletinMedicion: React.FC = () => {
         }
         itemsByTransaction.get(key)!.push({ transaction, item });
       });
-      
+
       // Preparar datos para la segunda hoja (detalle de items)
       const itemsData: any[] = [];
-      
+
       // Procesar por transacción para agregar subtotales
       itemsByTransaction.forEach((items, transactionId) => {
         let totalOrdenadoOC = 0;
         let totalRecibidoOC = 0;
-        
+
         // Agregar items de esta transacción
         items.forEach(({ transaction, item }) => {
           // Determinar la tasa de impuesto
           let tasaImpuesto = 0;
           let metodoCalculo = '';
           let itemExento = false;
-          
+
           // Verificar si el item está explícitamente exento (TaxAmount = 0 Y TaxPercent = 0 o null)
-          if ((item.TaxAmount === 0 || item.TaxAmount === null) && 
-              (item.TaxPercent === 0 || item.TaxPercent === null || item.TaxPercent === undefined)) {
+          if ((item.TaxAmount === 0 || item.TaxAmount === null) &&
+            (item.TaxPercent === 0 || item.TaxPercent === null || item.TaxPercent === undefined)) {
             itemExento = true;
             metodoCalculo = 'Item exento de impuestos';
           }
-          
+
           // Solo calcular impuesto si el item NO está exento
           if (!itemExento) {
             // Método 1: Usar TaxPercent si existe y es razonable (entre 0% y 30%)
             if (item.TaxPercent !== undefined && item.TaxPercent !== null && item.TaxPercent > 0 && item.TaxPercent <= 30) {
               tasaImpuesto = item.TaxPercent / 100;
               metodoCalculo = `TaxPercent directo: ${item.TaxPercent}%`;
-            } 
+            }
             // Método 2: Calcular de TaxAmount / subtotal ordenado
             else if (item.TaxAmount > 0 && item.OrderedQuantity > 0) {
               const subtotalOrdenado = item.Price * item.OrderedQuantity;
@@ -995,11 +1005,11 @@ export const BoletinMedicion: React.FC = () => {
                 // Validar que sea razonable (máximo 30%)
                 if (calculado <= 0.30) {
                   tasaImpuesto = calculado;
-                  metodoCalculo = `TaxAmount/Subtotal: ${item.TaxAmount}/${subtotalOrdenado} = ${(calculado*100).toFixed(2)}%`;
+                  metodoCalculo = `TaxAmount/Subtotal: ${item.TaxAmount}/${subtotalOrdenado} = ${(calculado * 100).toFixed(2)}%`;
                 }
               }
             }
-            
+
             // Método 3: Calcular de la diferencia entre TotalSalesAmount y subtotal
             else if (item.TotalSalesAmount && item.OrderedQuantity > 0) {
               const subtotalOrdenado = item.Price * item.OrderedQuantity;
@@ -1007,11 +1017,11 @@ export const BoletinMedicion: React.FC = () => {
                 const calculado = (item.TotalSalesAmount - subtotalOrdenado) / subtotalOrdenado;
                 if (calculado <= 0.30) {
                   tasaImpuesto = calculado;
-                  metodoCalculo = `TotalSalesAmount: (${item.TotalSalesAmount}-${subtotalOrdenado})/${subtotalOrdenado} = ${(calculado*100).toFixed(2)}%`;
+                  metodoCalculo = `TotalSalesAmount: (${item.TotalSalesAmount}-${subtotalOrdenado})/${subtotalOrdenado} = ${(calculado * 100).toFixed(2)}%`;
                 }
               }
             }
-            
+
             // Método 4: Inferir del total de la orden SOLO si no tenemos información específica del item
             // Y el item no está marcado explícitamente como sin impuesto
             else if (transaction.TotalAmount > 0 && transaction.TaxAmount && transaction.TaxAmount > 0) {
@@ -1020,15 +1030,15 @@ export const BoletinMedicion: React.FC = () => {
                 const calculado = transaction.TaxAmount / subtotalOrden;
                 if (calculado <= 0.30) {
                   tasaImpuesto = calculado;
-                  metodoCalculo = `Tasa de orden (inferido): ${transaction.TaxAmount}/${subtotalOrden} = ${(calculado*100).toFixed(2)}%`;
+                  metodoCalculo = `Tasa de orden (inferido): ${transaction.TaxAmount}/${subtotalOrden} = ${(calculado * 100).toFixed(2)}%`;
                 }
               }
             }
           }
-          
+
           // Log detallado para órdenes específicas o items con inconsistencias
-          if (transaction.DocID === 'ICI-ORC00000288' || transaction.DocID === 'ICI-ORC00000255' || 
-              tasaImpuesto > 0.20 || itemExento) {
+          if (transaction.DocID === 'ICI-ORC00000288' || transaction.DocID === 'ICI-ORC00000255' ||
+            tasaImpuesto > 0.20 || itemExento) {
             console.log(`🔍 ${transaction.DocID} - ${item.ItemID} (${item.Name.substring(0, 40)}):`, {
               Price: item.Price,
               OrderedQty: item.OrderedQuantity,
@@ -1041,22 +1051,22 @@ export const BoletinMedicion: React.FC = () => {
               metodo: metodoCalculo
             });
           }
-          
+
           // Calcular descuento si TotalSalesAmount es diferente de Price * Qty + Tax
           const subtotalBrutoOrdenado = item.Price * item.OrderedQuantity;
           const impuestoEsperado = subtotalBrutoOrdenado * tasaImpuesto;
           const totalEsperado = subtotalBrutoOrdenado + impuestoEsperado;
-          
+
           // Inferir descuento desde TotalSalesAmount si está disponible y difiere del total esperado
           let descuentoOrdenado = 0;
           let descuentoPercent = 0;
-          
+
           if (item.TotalSalesAmount && Math.abs(item.TotalSalesAmount - totalEsperado) > 0.01) {
             // Hay una diferencia, puede ser un descuento
             // TotalSalesAmount = (Subtotal - Descuento) + Impuesto
             // Resolviendo: Descuento = Subtotal + Impuesto - TotalSalesAmount
             const diferenciaTotal = totalEsperado - item.TotalSalesAmount;
-            
+
             // Si la diferencia es positiva, es un descuento
             if (diferenciaTotal > 0) {
               // El descuento afecta tanto el subtotal como el impuesto
@@ -1067,39 +1077,39 @@ export const BoletinMedicion: React.FC = () => {
               descuentoPercent = subtotalBrutoOrdenado > 0 ? (descuentoOrdenado / subtotalBrutoOrdenado) * 100 : 0;
             }
           }
-          
+
           const subtotalOrdenado = subtotalBrutoOrdenado - descuentoOrdenado;
           const impuestoOrdenado = subtotalOrdenado * tasaImpuesto;
           const totalOrdenado = subtotalOrdenado + impuestoOrdenado;
-          
+
           // Calcular valores basados en la cantidad recibida
           const subtotalBrutoRecibido = item.Price * item.ReceivedQuantity;
-          const descuentoRecibido = item.OrderedQuantity > 0 
-            ? (descuentoOrdenado / item.OrderedQuantity) * item.ReceivedQuantity 
+          const descuentoRecibido = item.OrderedQuantity > 0
+            ? (descuentoOrdenado / item.OrderedQuantity) * item.ReceivedQuantity
             : 0;
           const subtotalRecibido = subtotalBrutoRecibido - descuentoRecibido;
           const impuestoRecibido = subtotalRecibido * tasaImpuesto;
           const totalRecibido = subtotalRecibido + impuestoRecibido;
-          
+
           // Determinar moneda - verificar múltiples formatos posibles
           let moneda = 'DOP'; // Por defecto
           const currencyValue = String(transaction.Currency || '').trim().toUpperCase();
-          
+
           // USD puede venir como: '2', 'USD', o GUID específico
-          if (currencyValue === '2' || currencyValue === 'USD' || 
-              currencyValue === 'B99EF67E-9001-4BAA-ADCE-08DDAA50AC6E') {
+          if (currencyValue === '2' || currencyValue === 'USD' ||
+            currencyValue === 'B99EF67E-9001-4BAA-ADCE-08DDAA50AC6E') {
             moneda = 'USD';
           }
           // DOP puede venir como: '1', 'DOP', o GUID específico  
-          else if (currencyValue === '1' || currencyValue === 'DOP' || 
-                   currencyValue === 'F5825D92-D608-4B7B-ADCD-08DDAA50AC6E') {
+          else if (currencyValue === '1' || currencyValue === 'DOP' ||
+            currencyValue === 'F5825D92-D608-4B7B-ADCD-08DDAA50AC6E') {
             moneda = 'DOP';
           }
-          
+
           // Acumular totales de la OC
           totalOrdenadoOC += totalOrdenado;
           totalRecibidoOC += totalRecibido;
-          
+
           // Agregar item al detalle
           itemsData.push({
             'Proyecto': transaction.JobNumber || '',
@@ -1132,10 +1142,10 @@ export const BoletinMedicion: React.FC = () => {
           });
         });
       });
-      
+
       // Crear hoja de cálculo para items
       const wsItems = XLSX.utils.json_to_sheet(itemsData);
-      
+
       // Establecer anchos de columnas para items
       wsItems['!cols'] = [
         { wch: 35 }, // Proyecto
@@ -1166,19 +1176,19 @@ export const BoletinMedicion: React.FC = () => {
         { wch: 16 }, // Total Recibido
         { wch: 20 }  // N° Recepciones
       ];
-      
+
       // Crear libro y agregar ambas hojas
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Órdenes por Proyecto');
       XLSX.utils.book_append_sheet(wb, wsItems, 'Detalle de Items');
-      
+
       // Generar nombre de archivo con fecha
       const fecha = new Date().toISOString().split('T')[0];
       const fileName = `OC_por_Proyecto_${fecha}.xlsx`;
-      
+
       // Descargar archivo
       XLSX.writeFile(wb, fileName);
-      
+
       console.log('✅ Archivo Excel generado exitosamente con 2 hojas');
     } catch (error) {
       console.error('❌ Error al exportar a Excel:', error);
@@ -1201,24 +1211,30 @@ export const BoletinMedicion: React.FC = () => {
       measurementStartDate: boletin.measurementStartDate,
       measurementEndDate: boletin.measurementEndDate
     });
-    
+
     const doc = new jsPDF();
-    
+
     // Header
     doc.setFontSize(18);
     doc.setTextColor(40);
-    doc.text("Boletín de Medición y Solicitud de Pago", 14, 22);
-    
+    doc.text("Boletín de Medición", 14, 22);
+
     doc.setFontSize(11);
     doc.setTextColor(100);
     doc.text(`N° Boletín: ${boletin.docNumber}`, 14, 32);
-    
+
+    // Mostrar Cubicación N° si existe (en vista previa puede ser (Por asignar))
+    const cubNo = boletin.cubicacionNo;
+    if (cubNo !== undefined && cubNo !== null) {
+      doc.text(`Cubicación N°: ${cubNo}`, 80, 32);
+    }
+
     // Validar fecha antes de formatear
     const fechaBoletin = boletin.date ? new Date(boletin.date) : new Date();
     doc.text(`Fecha: ${fechaBoletin.toLocaleDateString('es-ES')}`, 14, 38);
     doc.text(`OC Referencia: ${boletin.docID}`, 14, 44);
     doc.text(`Proveedor: ${boletin.vendorName}`, 14, 50);
-    
+
     let currentHeaderY;
     if (boletin.vendorFiscalID) {
       doc.text(`RNC/Cédula: ${boletin.vendorFiscalID}`, 14, 56);
@@ -1228,7 +1244,7 @@ export const BoletinMedicion: React.FC = () => {
       doc.text(`Proyecto: ${boletin.projectName || 'General'}`, 14, 56);
       currentHeaderY = 62;
     }
-    
+
     if (boletin.measurementStartDate && boletin.measurementEndDate) {
       // Parsear fechas sin problemas de zona horaria
       const startDate = new Date(boletin.measurementStartDate.split('T')[0] + 'T12:00:00').toLocaleDateString('es-ES');
@@ -1236,25 +1252,25 @@ export const BoletinMedicion: React.FC = () => {
       doc.text(`Periodo: Desde ${startDate} y hasta ${endDate}`, 14, currentHeaderY);
       currentHeaderY += 6;
     }
-    
+
     if (boletin.receptionNumbers) {
       doc.text(`Recepciones: ${boletin.receptionNumbers}`, 14, currentHeaderY);
       currentHeaderY += 6;
     }
-    
+
     // Mostrar estado y motivo de rechazo si aplica
     if (boletin.status === 'RECHAZADO' && boletin.rejectionReason) {
       doc.setFontSize(10);
       doc.setTextColor(211, 47, 47); // Color rojo
       doc.text(`ESTADO: RECHAZADO`, 14, currentHeaderY);
       currentHeaderY += 6;
-      
+
       // Dividir el motivo en múltiples líneas si es muy largo
       const maxWidth = 180;
       const reasonLines = doc.splitTextToSize(`Motivo: ${boletin.rejectionReason}`, maxWidth);
       doc.text(reasonLines, 14, currentHeaderY);
       currentHeaderY += (reasonLines.length * 5);
-      
+
       doc.setTextColor(100); // Restaurar color
     }
 
@@ -1268,7 +1284,7 @@ export const BoletinMedicion: React.FC = () => {
       const normalizedUnitCode = normalizeUnitOfMeasure(l.unitOfMeasure);
       const unitFromCatalog = availableUnits.find((u) => u.code === normalizedUnitCode);
       const unitDescription = unitFromCatalog?.name || unitFromCatalog?.description || l.unitOfMeasure || '-';
-      
+
       let retentionText = '';
       if (l.retentionPercent > 0 || l.itbisRetentionPercent > 0) {
         const parts = [];
@@ -1278,7 +1294,7 @@ export const BoletinMedicion: React.FC = () => {
       } else {
         retentionText = 'N/A';
       }
-      
+
       return [
         l.description,
         unitDescription,
@@ -1296,8 +1312,8 @@ export const BoletinMedicion: React.FC = () => {
       body: tableRows,
       startY: currentHeaderY,
       theme: 'grid',
-      headStyles: { 
-        fillColor: [255, 255, 255], 
+      headStyles: {
+        fillColor: [255, 255, 255],
         textColor: [0, 0, 0],
         lineWidth: 0.1,
         lineColor: [0, 0, 0]
@@ -1305,18 +1321,18 @@ export const BoletinMedicion: React.FC = () => {
     });
 
     const finalY = (doc as any).lastAutoTable.finalY + 10;
-    
+
     doc.setFontSize(10);
     doc.setTextColor(0);
     const labelX = 120;
     const valueX = 195;
-    
+
     doc.text(`Subtotal:`, labelX, finalY);
     doc.text(`$${formatCurrency(boletin.subTotal)}`, valueX, finalY, { align: 'right' });
-    
+
     doc.text(`+ ITBIS:`, labelX, finalY + 6);
     doc.text(`$${formatCurrency(boletin.taxAmount)}`, valueX, finalY + 6, { align: 'right' });
-    
+
     // Total Bruto (antes de deducciones)
     const totalBruto = boletin.subTotal + boletin.taxAmount;
     doc.setLineWidth(0.5);
@@ -1325,7 +1341,7 @@ export const BoletinMedicion: React.FC = () => {
     doc.text(`Total Bruto:`, labelX, finalY + 15);
     doc.text(`$${formatCurrency(totalBruto)}`, valueX, finalY + 15, { align: 'right' });
     doc.setFont("helvetica", "normal");
-    
+
     // Sección de Deducciones
     let currentY = finalY + 23;
     doc.setFontSize(10);
@@ -1337,10 +1353,10 @@ export const BoletinMedicion: React.FC = () => {
     // Calcular y agrupar retenciones por línea por tipo y porcentaje
     const retentionsByType: { [key: string]: { percent: number; amount: number } } = {};
     const itbisRetentionsByPercent: { [key: string]: number } = {};
-    
+
     (boletin.lines || []).forEach((line: any) => {
       const st = line.quantity * line.unitPrice;
-      
+
       // Agrupar retenciones normales por porcentaje
       if (line.retentionPercent && line.retentionPercent > 0) {
         const retention = st * (line.retentionPercent / 100);
@@ -1350,7 +1366,7 @@ export const BoletinMedicion: React.FC = () => {
         }
         retentionsByType[key].amount += retention;
       }
-      
+
       // Agrupar retenciones de ITBIS por porcentaje
       if (line.itbisRetentionPercent && line.itbisRetentionPercent > 0) {
         const tax = st * ((line.taxPercent || 0) / 100);
@@ -1391,7 +1407,7 @@ export const BoletinMedicion: React.FC = () => {
       doc.text(`-$${formatCurrency(boletin.retentionAmount)}`, valueX, currentY, { align: 'right' });
       currentY += 6;
     }
-    
+
     if (boletin.advanceAmount > 0) {
       doc.text(`Amort. Anticipo (${boletin.advancePercent}%):`, labelX, currentY);
       doc.text(`-$${formatCurrency(boletin.advanceAmount)}`, valueX, currentY, { align: 'right' });
@@ -1403,14 +1419,14 @@ export const BoletinMedicion: React.FC = () => {
       doc.text(`-$${formatCurrency(boletin.isrAmount)}`, valueX, currentY, { align: 'right' });
       currentY += 6;
     }
-    
+
     // Total Deducciones
-    const totalDeducciones = (boletin.retentionAmount || 0) + 
-                             (boletin.advanceAmount || 0) + 
-                             (boletin.isrAmount || 0) + 
-                             Object.values(retentionsByType).reduce((sum, ret) => sum + ret.amount, 0) +
-                             Object.values(itbisRetentionsByPercent).reduce((sum, amt) => sum + amt, 0);
-    
+    const totalDeducciones = (boletin.retentionAmount || 0) +
+      (boletin.advanceAmount || 0) +
+      (boletin.isrAmount || 0) +
+      Object.values(retentionsByType).reduce((sum, ret) => sum + ret.amount, 0) +
+      Object.values(itbisRetentionsByPercent).reduce((sum, amt) => sum + amt, 0);
+
     if (totalDeducciones > 0) {
       doc.setLineWidth(0.3);
       doc.line(labelX, currentY + 1, valueX, currentY + 1);
@@ -1421,7 +1437,7 @@ export const BoletinMedicion: React.FC = () => {
       currentY += 2;
       doc.setFont("helvetica", "normal");
     }
-    
+
     // Neto a Pagar
     doc.setLineWidth(0.8);
     doc.line(labelX, currentY + 2, valueX, currentY + 2);
@@ -1443,11 +1459,11 @@ export const BoletinMedicion: React.FC = () => {
     const matchesSearch = tx.DocID.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (tx.VendorName && tx.VendorName.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (tx.ProjectName && tx.ProjectName.toLowerCase().includes(searchTerm.toLowerCase()));
-    
+
     // Filtro por fecha
-    const txDate = new Date(tx.DocDate).setHours(0,0,0,0);
-    const startObj = startDate ? new Date(startDate).setHours(0,0,0,0) : null;
-    const endObj = endDate ? new Date(endDate).setHours(0,0,0,0) : null;
+    const txDate = new Date(tx.DocDate).setHours(0, 0, 0, 0);
+    const startObj = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : null;
+    const endObj = endDate ? new Date(endDate).setHours(0, 0, 0, 0) : null;
 
     const matchesDate = (!startObj || txDate >= startObj) && (!endObj || txDate <= endObj);
 
@@ -1480,14 +1496,14 @@ export const BoletinMedicion: React.FC = () => {
           <div style={{ marginBottom: '25px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h2 style={{ margin: 0, fontSize: '1.8rem', color: '#1976d2' }}>Historial de Boletines Generados</h2>
-              <button 
-                onClick={() => fetchBoletinHistory()} 
-                style={{ 
-                  padding: '8px 16px', 
-                  backgroundColor: '#2196F3', 
-                  color: 'white', 
-                  border: 'none', 
-                  borderRadius: '4px', 
+              <button
+                onClick={() => fetchBoletinHistory()}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#2196F3',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
                   cursor: 'pointer',
                   fontSize: '0.9rem',
                   fontWeight: '500'
@@ -1558,9 +1574,9 @@ export const BoletinMedicion: React.FC = () => {
             </div>
           </div>
           {savedBoletines.length === 0 ? (
-            <div style={{ 
-              padding: '40px', 
-              textAlign: 'center', 
+            <div style={{
+              padding: '40px',
+              textAlign: 'center',
               color: '#999',
               backgroundColor: '#f9f9f9',
               borderRadius: '8px',
@@ -1571,286 +1587,290 @@ export const BoletinMedicion: React.FC = () => {
               <p style={{ margin: '10px 0 0 0', fontSize: '0.9rem' }}>Crea tu primer boletín seleccionando una Orden de Compra</p>
             </div>
           ) : (
-          (() => {
-            // Filtrar boletines
-            let filteredBoletines = savedBoletines;
-            
-            // Filtro por estado
-            if (statusFilter !== 'TODOS') {
-              filteredBoletines = filteredBoletines.filter(b => b.status === statusFilter);
-            }
-            
-            // Filtro por búsqueda
-            if (searchHistory.trim()) {
-              const search = searchHistory.toLowerCase();
-              filteredBoletines = filteredBoletines.filter(b => 
-                b.docNumber.toLowerCase().includes(search) ||
-                (b.projectName || '').toLowerCase().includes(search) ||
-                b.vendorName.toLowerCase().includes(search) ||
-                b.docID.toLowerCase().includes(search)
-              );
-            }
+            (() => {
+              // Filtrar boletines
+              let filteredBoletines = savedBoletines;
 
-            if (groupByProject) {
-              // Agrupar por proyecto
-              const groupedByProject: { [key: string]: any[] } = {};
-              filteredBoletines.forEach(b => {
-                const projectName = b.projectName || 'Sin Proyecto';
-                if (!groupedByProject[projectName]) {
-                  groupedByProject[projectName] = [];
-                }
-                groupedByProject[projectName].push(b);
-              });
+              // Filtro por estado
+              if (statusFilter !== 'TODOS') {
+                filteredBoletines = filteredBoletines.filter(b => b.status === statusFilter);
+              }
 
-              const toggleProject = (projectName: string) => {
-                const newCollapsed = new Set(collapsedProjects);
-                if (newCollapsed.has(projectName)) {
-                  newCollapsed.delete(projectName);
-                } else {
-                  newCollapsed.add(projectName);
-                }
-                setCollapsedProjects(newCollapsed);
-              };
+              // Filtro por búsqueda
+              if (searchHistory.trim()) {
+                const search = searchHistory.toLowerCase();
+                filteredBoletines = filteredBoletines.filter(b =>
+                  b.docNumber.toLowerCase().includes(search) ||
+                  (b.projectName || '').toLowerCase().includes(search) ||
+                  b.vendorName.toLowerCase().includes(search) ||
+                  b.docID.toLowerCase().includes(search)
+                );
+              }
 
-              return (
-                <div>
-                  {Object.keys(groupedByProject).sort().map(projectName => {
-                    const projectBoletines = groupedByProject[projectName];
-                    // Solo sumar boletines que NO estén RECHAZADOS
-                    const projectTotal = projectBoletines
-                      .filter(b => b.status !== 'RECHAZADO')
-                      .reduce((sum, b) => sum + b.netTotal, 0);
-                    // Total de rechazados
-                    const totalRechazado = projectBoletines
-                      .filter(b => b.status === 'RECHAZADO')
-                      .reduce((sum, b) => sum + b.netTotal, 0);
-                    const isCollapsed = collapsedProjects.has(projectName);
-                    
-                    // Contadores por estado
-                    const aprobados = projectBoletines.filter(b => b.status === 'APROBADO').length;
-                    const pendientes = projectBoletines.filter(b => b.status === 'PENDIENTE').length;
-                    const rechazados = projectBoletines.filter(b => b.status === 'RECHAZADO').length;
+              if (groupByProject) {
+                // Agrupar por proyecto
+                const groupedByProject: { [key: string]: any[] } = {};
+                filteredBoletines.forEach(b => {
+                  const projectName = b.projectName || 'Sin Proyecto';
+                  if (!groupedByProject[projectName]) {
+                    groupedByProject[projectName] = [];
+                  }
+                  groupedByProject[projectName].push(b);
+                });
 
-                    return (
-                      <div key={projectName} style={{ marginBottom: '25px' }}>
-                        {/* Encabezado del Proyecto */}
-                        <div 
-                          onClick={() => toggleProject(projectName)}
-                          style={{
-                            backgroundColor: '#e3f2fd',
-                            padding: '15px 20px',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            border: '2px solid #1976d2',
-                            marginBottom: isCollapsed ? '0' : '10px',
-                            transition: 'all 0.3s ease'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                            <span style={{ fontSize: '1.2rem' }}>{isCollapsed ? '▶' : '▼'}</span>
-                            <div>
-                              <h3 style={{ margin: 0, color: '#1976d2', fontSize: '1.1rem' }}>{projectName}</h3>
-                              <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '5px', display: 'flex', gap: '12px' }}>
-                                <span>{projectBoletines.length} {projectBoletines.length === 1 ? 'boletín' : 'boletines'}</span>
-                                {aprobados > 0 && <span style={{ color: '#28a745' }}>✓ {aprobados} aprobado{aprobados > 1 ? 's' : ''}</span>}
-                                {pendientes > 0 && <span style={{ color: '#ff9800' }}>⏱ {pendientes} pendiente{pendientes > 1 ? 's' : ''}</span>}
-                                {rechazados > 0 && <span style={{ color: '#d32f2f' }}>✕ {rechazados} rechazado{rechazados > 1 ? 's' : ''}</span>}
+                const toggleProject = (projectName: string) => {
+                  const newCollapsed = new Set(collapsedProjects);
+                  if (newCollapsed.has(projectName)) {
+                    newCollapsed.delete(projectName);
+                  } else {
+                    newCollapsed.add(projectName);
+                  }
+                  setCollapsedProjects(newCollapsed);
+                };
+
+                return (
+                  <div>
+                    {Object.keys(groupedByProject).sort().map(projectName => {
+                      const projectBoletines = groupedByProject[projectName];
+                      // Solo sumar boletines que NO estén RECHAZADOS
+                      const projectTotal = projectBoletines
+                        .filter(b => b.status !== 'RECHAZADO')
+                        .reduce((sum, b) => sum + b.netTotal, 0);
+                      // Total de rechazados
+                      const totalRechazado = projectBoletines
+                        .filter(b => b.status === 'RECHAZADO')
+                        .reduce((sum, b) => sum + b.netTotal, 0);
+                      const isCollapsed = collapsedProjects.has(projectName);
+
+                      // Contadores por estado
+                      const aprobados = projectBoletines.filter(b => b.status === 'APROBADO').length;
+                      const pendientes = projectBoletines.filter(b => b.status === 'PENDIENTE').length;
+                      const rechazados = projectBoletines.filter(b => b.status === 'RECHAZADO').length;
+
+                      return (
+                        <div key={projectName} style={{ marginBottom: '25px' }}>
+                          {/* Encabezado del Proyecto */}
+                          <div
+                            onClick={() => toggleProject(projectName)}
+                            style={{
+                              backgroundColor: '#e3f2fd',
+                              padding: '15px 20px',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              border: '2px solid #1976d2',
+                              marginBottom: isCollapsed ? '0' : '10px',
+                              transition: 'all 0.3s ease'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                              <span style={{ fontSize: '1.2rem' }}>{isCollapsed ? '▶' : '▼'}</span>
+                              <div>
+                                <h3 style={{ margin: 0, color: '#1976d2', fontSize: '1.1rem' }}>{projectName}</h3>
+                                <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '5px', display: 'flex', gap: '12px' }}>
+                                  <span>{projectBoletines.length} {projectBoletines.length === 1 ? 'boletín' : 'boletines'}</span>
+                                  {aprobados > 0 && <span style={{ color: '#28a745' }}>✓ {aprobados} aprobado{aprobados > 1 ? 's' : ''}</span>}
+                                  {pendientes > 0 && <span style={{ color: '#ff9800' }}>⏱ {pendientes} pendiente{pendientes > 1 ? 's' : ''}</span>}
+                                  {rechazados > 0 && <span style={{ color: '#d32f2f' }}>✕ {rechazados} rechazado{rechazados > 1 ? 's' : ''}</span>}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#28a745' }}>
-                              ${formatCurrency(projectTotal)}
-                            </div>
-                            <div style={{ fontSize: '0.8rem', color: rechazados > 0 ? '#666' : '#666' }}>
-                              {rechazados > 0 ? 'Total (sin rechazados)' : 'Total Proyecto'}
-                            </div>
-                            {rechazados > 0 && totalRechazado > 0 && (
-                              <div style={{ 
-                                fontSize: '0.9rem', 
-                                color: '#d32f2f', 
-                                marginTop: '5px',
-                                fontWeight: '600'
-                              }}>
-                                -${formatCurrency(totalRechazado)} rechazados
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#28a745' }}>
+                                ${formatCurrency(projectTotal)}
                               </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Tabla de Boletines del Proyecto */}
-                        {!isCollapsed && (
-                          <div className="table-responsive" style={{ marginLeft: '20px' }}>
-                            <table className="data-table history-table">
-                              <thead>
-                                <tr>
-                                  <th style={{ minWidth: '160px', width: '15%' }}>N° BOLETÍN</th>
-                                  <th style={{ minWidth: '110px', width: '10%' }}>FECHA</th>
-                                  <th style={{ minWidth: '140px', width: '12%' }}>REF (OC / REC)</th>
-                                  <th style={{ minWidth: '180px', width: '18%' }}>PROVEEDOR</th>
-                                  <th style={{ minWidth: '140px', width: '12%', textAlign: 'right' }}>NETO PAGADO</th>
-                                  <th style={{ minWidth: '120px', width: '10%', textAlign: 'center' }}>ESTADO</th>
-                                  <th style={{ minWidth: '280px', width: '23%', textAlign: 'center' }}>ACCIONES</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {projectBoletines.map(b => (
-                  <tr key={b.id}>
-                    <td><strong style={{ fontSize: '1rem', color: '#1976d2' }}>{b.docNumber}</strong></td>
-                    <td style={{ whiteSpace: 'nowrap', fontSize: '0.95rem' }}>{new Date(b.date).toLocaleDateString('es-ES')}</td>
-                    <td>
-                      <div className="project-cell-large" title={b.projectName}>
-                        {b.projectName || 'General'}
-                      </div>
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <div style={{ fontSize: '0.95rem', fontWeight: '600', color: '#333' }}>{b.docID}</div>
-                      {b.receptionNumbers && (
-                        <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '3px' }}>Rec: {b.receptionNumbers}</div>
-                      )}
-                    </td>
-                    <td>
-                      <div className="vendor-cell-large" title={b.vendorName}>
-                        {b.vendorName}
-                      </div>
-                      {b.vendorFiscalID && (
-                        <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '3px' }}>
-                          RNC: {b.vendorFiscalID}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '1rem', color: '#28a745' }}>${formatCurrency(b.netTotal)}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <span className={`status-badge-large status-${b.status.toLowerCase()}`}>
-                        {b.status}
-                      </span>
-                      {b.status === 'RECHAZADO' && b.rejectionReason && (
-                        <div style={{ 
-                          marginTop: '8px', 
-                          fontSize: '0.85rem', 
-                          color: '#d32f2f', 
-                          backgroundColor: '#ffebee', 
-                          padding: '6px 10px', 
-                          borderRadius: '4px',
-                          border: '1px solid #ffcdd2',
-                          textAlign: 'left'
-                        }}>
-                          <strong>Motivo:</strong> {b.rejectionReason}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <div className="action-buttons-container-large">
-                        <button className="btn-action-large btn-pdf" onClick={() => handleGeneratePDF(b)}>
-                          <span>📄</span> PDF
-                        </button>
-                        {b.status === "PENDIENTE" && (
-                          <>
-                            <button className="btn-action-large btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
-                              <span>✏️</span> Editar
-                            </button>
-                            {(user?.role === 'admin' || user?.accessContabilidad) && (
-                              <div className="approval-group-large">
-                                <button className="btn-action-large btn-approve" onClick={() => handleStatusChange(b.id, 'APROBADO')}>
-                                  <span>✓</span> Aprobar
-                                </button>
-                                <button className="btn-action-large btn-reject" onClick={() => handleStatusChange(b.id, 'RECHAZADO')}>
-                                  <span>✕</span> Rechazar
-                                </button>
+                              <div style={{ fontSize: '0.8rem', color: rechazados > 0 ? '#666' : '#666' }}>
+                                {rechazados > 0 ? 'Total (sin rechazados)' : 'Total Proyecto'}
                               </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          )}
-        </div>
-      );
-    })}
-    
-    {/* Botón flotante para cerrar en nueva pestaña */}
-    {isNewTab && (
-      <button 
-        className="floating-close-btn"
-        onClick={handleClose}
-        title="Cerrar ventana"
-      >
-        ✕
-      </button>
-    )}
-  </div>
-);
-            } else {
-              // Vista sin agrupar: tabla completa
-              return (
-                <div className="table-responsive">
-                  <table className="data-table history-table">
-                    <thead>
-                      <tr>
-                        <th style={{ minWidth: '160px', width: '15%' }}>N° BOLETÍN</th>
-                        <th style={{ minWidth: '110px', width: '10%' }}>FECHA</th>
-                        <th style={{ minWidth: '140px', width: '12%' }}>REF (OC / REC)</th>
-                        <th style={{ minWidth: '200px', width: '16%' }}>PROYECTO</th>
-                        <th style={{ minWidth: '180px', width: '18%' }}>PROVEEDOR</th>
-                        <th style={{ minWidth: '140px', width: '12%', textAlign: 'right' }}>NETO PAGADO</th>
-                        <th style={{ minWidth: '120px', width: '10%', textAlign: 'center' }}>ESTADO</th>
-                        <th style={{ minWidth: '280px', width: '17%', textAlign: 'center' }}>ACCIONES</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredBoletines.map(b => (
-                        <tr key={b.id}>
-                          <td style={{ fontWeight: '600', color: '#1976d2' }}>{b.docNumber}</td>
-                          <td>{new Date(b.date).toLocaleDateString('es-DO')}</td>
-                          <td><div style={{ fontSize: '0.85rem', color: '#666' }}>{b.docID}</div></td>
-                          <td className="project-cell-large">{b.projectName || 'Sin Proyecto'}</td>
-                          <td className="vendor-cell-large">{b.vendorName}</td>
-                          <td style={{ textAlign: 'right', fontWeight: '700', color: '#28a745', fontSize: '1rem' }}>
-                            ${formatCurrency(b.netTotal)}
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <span className={`status-badge status-${b.status.toLowerCase()}`}>{b.status}</span>
-                          </td>
-                          <td>
-                            <div className="action-buttons-container-large">
-                              <button className="btn-action-large btn-pdf" onClick={() => handleGeneratePDF(b)}>
-                                <span>📄</span> PDF
-                              </button>
-                              {b.status === "PENDIENTE" && (
-                                <>
-                                  <button className="btn-action-large btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
-                                    <span>✏️</span> Editar
-                                  </button>
-                                  {(user?.role === 'admin' || user?.accessContabilidad) && (
-                                    <div className="approval-group-large">
-                                      <button className="btn-action-large btn-approve" onClick={() => handleStatusChange(b.id, 'APROBADO')}>
-                                        <span>✓</span> Aprobar
-                                      </button>
-                                      <button className="btn-action-large btn-reject" onClick={() => handleStatusChange(b.id, 'RECHAZADO')}>
-                                        <span>✕</span> Rechazar
-                                      </button>
-                                    </div>
-                                  )}
-                                </>
+                              {rechazados > 0 && totalRechazado > 0 && (
+                                <div style={{
+                                  fontSize: '0.9rem',
+                                  color: '#d32f2f',
+                                  marginTop: '5px',
+                                  fontWeight: '600'
+                                }}>
+                                  -${formatCurrency(totalRechazado)} rechazados
+                                </div>
                               )}
                             </div>
-                          </td>
+                          </div>
+
+                          {/* Tabla de Boletines del Proyecto */}
+                          {!isCollapsed && (
+                            <div className="table-responsive" style={{ marginLeft: '20px' }}>
+                              <table className="data-table history-table">
+                                <thead>
+                                  <tr>
+                                    <th style={{ minWidth: '160px', width: '13%' }}>N° BOLETÍN</th>
+                                    <th style={{ minWidth: '80px', width: '7%' }}>CUBICACIÓN</th>
+                                    <th style={{ minWidth: '110px', width: '10%' }}>FECHA</th>
+                                    <th style={{ minWidth: '140px', width: '12%' }}>REF (OC / REC)</th>
+                                    <th style={{ minWidth: '180px', width: '18%' }}>PROVEEDOR</th>
+                                    <th style={{ minWidth: '140px', width: '12%', textAlign: 'right' }}>NETO PAGADO</th>
+                                    <th style={{ minWidth: '120px', width: '10%', textAlign: 'center' }}>ESTADO</th>
+                                    <th style={{ minWidth: '280px', width: '23%', textAlign: 'center' }}>ACCIONES</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {projectBoletines.map(b => (
+                                    <tr key={b.id}>
+                                      <td><strong style={{ fontSize: '1rem', color: '#1976d2' }}>{b.docNumber}</strong></td>
+                                      <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{b.cubicacionNo || '-'}</td>
+                                      <td style={{ whiteSpace: 'nowrap', fontSize: '0.95rem' }}>{new Date(b.date).toLocaleDateString('es-ES')}</td>
+                                      <td>
+                                        <div className="project-cell-large" title={b.projectName}>
+                                          {b.projectName || 'General'}
+                                        </div>
+                                      </td>
+                                      <td style={{ whiteSpace: 'nowrap' }}>
+                                        <div style={{ fontSize: '0.95rem', fontWeight: '600', color: '#333' }}>{b.docID}</div>
+                                        {b.receptionNumbers && (
+                                          <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '3px' }}>Rec: {b.receptionNumbers}</div>
+                                        )}
+                                      </td>
+                                      <td>
+                                        <div className="vendor-cell-large" title={b.vendorName}>
+                                          {b.vendorName}
+                                        </div>
+                                        {b.vendorFiscalID && (
+                                          <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '3px' }}>
+                                            RNC: {b.vendorFiscalID}
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '1rem', color: '#28a745' }}>${formatCurrency(b.netTotal)}</td>
+                                      <td style={{ textAlign: 'center' }}>
+                                        <span className={`status-badge-large status-${b.status.toLowerCase()}`}>
+                                          {b.status}
+                                        </span>
+                                        {b.status === 'RECHAZADO' && b.rejectionReason && (
+                                          <div style={{
+                                            marginTop: '8px',
+                                            fontSize: '0.85rem',
+                                            color: '#d32f2f',
+                                            backgroundColor: '#ffebee',
+                                            padding: '6px 10px',
+                                            borderRadius: '4px',
+                                            border: '1px solid #ffcdd2',
+                                            textAlign: 'left'
+                                          }}>
+                                            <strong>Motivo:</strong> {b.rejectionReason}
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td>
+                                        <div className="action-buttons-container-large">
+                                          <button className="btn-action-large btn-pdf" onClick={() => handleGeneratePDF(b)}>
+                                            <span>📄</span> PDF
+                                          </button>
+                                          {b.status === "PENDIENTE" && (
+                                            <>
+                                              <button className="btn-action-large btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
+                                                <span>✏️</span> Editar
+                                              </button>
+                                              {(user?.role === 'admin' || user?.accessContabilidad) && (
+                                                <div className="approval-group-large">
+                                                  <button className="btn-action-large btn-approve" onClick={() => handleStatusChange(b.id, 'APROBADO')}>
+                                                    <span>✓</span> Aprobar
+                                                  </button>
+                                                  <button className="btn-action-large btn-reject" onClick={() => handleStatusChange(b.id, 'RECHAZADO')}>
+                                                    <span>✕</span> Rechazar
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Botón flotante para cerrar en nueva pestaña */}
+                    {isNewTab && (
+                      <button
+                        className="floating-close-btn"
+                        onClick={handleClose}
+                        title="Cerrar ventana"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                );
+              } else {
+                // Vista sin agrupar: tabla completa
+                return (
+                  <div className="table-responsive">
+                    <table className="data-table history-table">
+                      <thead>
+                        <tr>
+                          <th style={{ minWidth: '160px', width: '14%' }}>N° BOLETÍN</th>
+                          <th style={{ minWidth: '80px', width: '6%' }}>CUB.</th>
+                          <th style={{ minWidth: '110px', width: '10%' }}>FECHA</th>
+                          <th style={{ minWidth: '140px', width: '12%' }}>REF (OC / REC)</th>
+                          <th style={{ minWidth: '200px', width: '16%' }}>PROYECTO</th>
+                          <th style={{ minWidth: '180px', width: '18%' }}>PROVEEDOR</th>
+                          <th style={{ minWidth: '140px', width: '12%', textAlign: 'right' }}>NETO PAGADO</th>
+                          <th style={{ minWidth: '120px', width: '10%', textAlign: 'center' }}>ESTADO</th>
+                          <th style={{ minWidth: '280px', width: '17%', textAlign: 'center' }}>ACCIONES</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            }
-          })()
+                      </thead>
+                      <tbody>
+                        {filteredBoletines.map(b => (
+                          <tr key={b.id}>
+                            <td style={{ fontWeight: '600', color: '#1976d2' }}>{b.docNumber}</td>
+                            <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{b.cubicacionNo || '-'}</td>
+                            <td>{new Date(b.date).toLocaleDateString('es-DO')}</td>
+                            <td><div style={{ fontSize: '0.85rem', color: '#666' }}>{b.docID}</div></td>
+                            <td className="project-cell-large">{b.projectName || 'Sin Proyecto'}</td>
+                            <td className="vendor-cell-large">{b.vendorName}</td>
+                            <td style={{ textAlign: 'right', fontWeight: '700', color: '#28a745', fontSize: '1rem' }}>
+                              ${formatCurrency(b.netTotal)}
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <span className={`status-badge status-${b.status.toLowerCase()}`}>{b.status}</span>
+                            </td>
+                            <td>
+                              <div className="action-buttons-container-large">
+                                <button className="btn-action-large btn-pdf" onClick={() => handleGeneratePDF(b)}>
+                                  <span>📄</span> PDF
+                                </button>
+                                {b.status === "PENDIENTE" && (
+                                  <>
+                                    <button className="btn-action-large btn-edit" onClick={() => window.open(`/?editBoletin=${b.id}`, '_blank')}>
+                                      <span>✏️</span> Editar
+                                    </button>
+                                    {(user?.role === 'admin' || user?.accessContabilidad) && (
+                                      <div className="approval-group-large">
+                                        <button className="btn-action-large btn-approve" onClick={() => handleStatusChange(b.id, 'APROBADO')}>
+                                          <span>✓</span> Aprobar
+                                        </button>
+                                        <button className="btn-action-large btn-reject" onClick={() => handleStatusChange(b.id, 'RECHAZADO')}>
+                                          <span>✕</span> Rechazar
+                                        </button>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              }
+            })()
           )}
         </div>
       ) : !selectedTx ? (
@@ -1860,26 +1880,26 @@ export const BoletinMedicion: React.FC = () => {
             <div className="filter-group" style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '0.9rem', color: '#666', fontWeight: '500' }}>Desde:</span>
-                <input 
-                  type="date" 
-                  value={startDate} 
+                <input
+                  type="date"
+                  value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '0.9rem' }}
                 />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '0.9rem', color: '#666', fontWeight: '500' }}>Hasta:</span>
-                <input 
-                  type="date" 
-                  value={endDate} 
+                <input
+                  type="date"
+                  value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                   style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '0.9rem' }}
                 />
               </div>
               <div className="search-box" style={{ width: '350px' }}>
-                <input 
-                  type="text" 
-                  placeholder="Buscar OC, Proveedor o Proyecto..." 
+                <input
+                  type="text"
+                  placeholder="Buscar OC, Proveedor o Proyecto..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   style={{ width: '100%', padding: '10px 18px', borderRadius: '25px', border: '1px solid #ddd', outline: 'none', fontSize: '0.95rem' }}
@@ -1887,8 +1907,8 @@ export const BoletinMedicion: React.FC = () => {
               </div>
               {user?.accessSubcontratos && (
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: filterSubcontratos ? '#fff3e0' : '#f5f5f5', padding: '8px 15px', borderRadius: '6px', border: filterSubcontratos ? '1px solid #fb8c00' : '1px solid #ddd', fontSize: '0.9rem', fontWeight: '500' }}>
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     checked={filterSubcontratos}
                     onChange={(e) => setFilterSubcontratos(e.target.checked)}
                     style={{ cursor: 'pointer', width: '16px', height: '16px' }}
@@ -1896,7 +1916,7 @@ export const BoletinMedicion: React.FC = () => {
                   <span>🔍 Solo Subcontratos</span>
                 </label>
               )}
-              <button 
+              <button
                 onClick={() => { setSearchTerm(''); setStartDate(''); setEndDate(''); setFilterSubcontratos(false); }}
                 style={{ background: '#eee', border: 'none', padding: '8px 15px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}
               >
@@ -1907,9 +1927,9 @@ export const BoletinMedicion: React.FC = () => {
 
           {/* Indicador de filtro activo */}
           {filterSubcontratos && user?.accessSubcontratos && (
-            <div style={{ 
-              marginBottom: '20px', 
-              padding: '12px 18px', 
+            <div style={{
+              marginBottom: '20px',
+              padding: '12px 18px',
               borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
@@ -1928,12 +1948,12 @@ export const BoletinMedicion: React.FC = () => {
           )}
 
           {error && (
-            <div style={{ 
-              background: '#f8d7da', 
-              border: '1px solid #f5c6cb', 
-              color: '#721c24', 
-              padding: '15px', 
-              borderRadius: '6px', 
+            <div style={{
+              background: '#f8d7da',
+              border: '1px solid #f5c6cb',
+              color: '#721c24',
+              padding: '15px',
+              borderRadius: '6px',
               marginTop: '15px',
               display: 'flex',
               alignItems: 'center',
@@ -1951,10 +1971,10 @@ export const BoletinMedicion: React.FC = () => {
           {loading ? <div className="loading-spinner">Cargando órdenes de compra de AdmCloud...</div> : (
             <div className="table-responsive">
               {Object.keys(groupedTransactions).length === 0 ? (
-                <div style={{ 
-                  textAlign: 'center', 
-                  padding: '40px', 
-                  background: '#f8f9fa', 
+                <div style={{
+                  textAlign: 'center',
+                  padding: '40px',
+                  background: '#f8f9fa',
                   borderRadius: '8px',
                   color: '#666'
                 }}>
@@ -1963,133 +1983,133 @@ export const BoletinMedicion: React.FC = () => {
                   <p>No se encontraron órdenes que coincidan con los filtros aplicados</p>
                 </div>
               ) : (
-              <>
-              {Object.entries(groupedTransactions).map(([projectName, txs]) => {
-                const projectTotal = txs.reduce((sum, tx) => sum + tx.TotalAmount, 0);
-                
-                return (
-                <div key={projectName} style={{ marginBottom: '40px' }}>
-                  <h4 style={{ 
-                    background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', 
-                    padding: '16px 24px', 
-                    borderRadius: '10px', 
-                    borderLeft: '5px solid #1976d2',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
-                    marginBottom: '15px'
-                  }}>
-                    <div>
-                      <span style={{ fontSize: '1.1rem' }}>Proyecto: <strong>{projectName}</strong></span>
-                      <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '5px' }}>
-                        {txs.length} {txs.length === 1 ? 'Orden' : 'Órdenes'}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#28a745' }}>
-                        ${formatCurrency(projectTotal)}
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: '#666' }}>Total Proyecto</div>
-                    </div>
-                  </h4>
-                  <table className="data-table oc-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '15%' }}>DOC ID</th>
-                        <th style={{ width: '35%' }}>PROVEEDOR</th>
-                        <th style={{ width: '15%' }}>FECHA OC</th>
-                        <th style={{ width: '20%', textAlign: 'right' }}>TOTAL OC</th>
-                        <th style={{ width: '15%', textAlign: 'center' }}>ACCIÓN</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {txs.map(tx => (
-                        <tr key={tx.ID}>
-                          <td style={{ fontWeight: '600', color: '#1976d2' }}>{tx.DocID}</td>
-                          <td>
-                            <div>{tx.VendorName}</div>
-                            {tx.VendorFiscalID && (
-                              <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '2px' }}>
-                                RNC: {tx.VendorFiscalID}
-                              </div>
-                            )}
-                          </td>
-                          <td style={{ whiteSpace: 'nowrap' }}>{new Date(tx.DocDate).toLocaleDateString('es-ES')}</td>
-                          <td style={{ textAlign: 'right', fontWeight: '600', color: '#28a745' }}>${formatCurrency(tx.TotalAmount)}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            <button className="btn-small" onClick={() => window.open(`/?generateBoletin=${tx.ID}`, '_blank')}>Seleccionar</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-              })}
-              
-              {/* Total General de Órdenes */}
-              {filteredTxs.length > 0 && (
-                <div style={{ 
-                  marginTop: '30px', 
-                  padding: '20px 30px', 
-                  background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
-                  borderRadius: '12px',
-                  border: '2px solid #1976d2',
-                  boxShadow: '0 4px 12px rgba(25,118,210,0.15)'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <h4 style={{ margin: '0 0 8px 0', fontSize: '1.2rem', color: '#0d47a1' }}>
-                        📊 Resumen Total de Órdenes
-                      </h4>
-                      <p style={{ margin: 0, color: '#1565c0', fontSize: '0.9rem' }}>
-                        {filteredTxs.length} {filteredTxs.length === 1 ? 'orden generada' : 'órdenes generadas'} • {Object.keys(groupedTransactions).length} {Object.keys(groupedTransactions).length === 1 ? 'proyecto' : 'proyectos'}
-                      </p>
-                      <button
-                        onClick={exportToExcel}
-                        style={{
-                          marginTop: '12px',
-                          padding: '10px 20px',
-                          backgroundColor: '#28a745',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '0.9rem',
-                          fontWeight: '600',
+                <>
+                  {Object.entries(groupedTransactions).map(([projectName, txs]) => {
+                    const projectTotal = txs.reduce((sum, tx) => sum + tx.TotalAmount, 0);
+
+                    return (
+                      <div key={projectName} style={{ marginBottom: '40px' }}>
+                        <h4 style={{
+                          background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+                          padding: '16px 24px',
+                          borderRadius: '10px',
+                          borderLeft: '5px solid #1976d2',
                           display: 'flex',
+                          justifyContent: 'space-between',
                           alignItems: 'center',
-                          gap: '8px'
-                        }}
-                      >
-                        <span>📊</span> Exportar a Excel
-                      </button>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '0.85rem', color: '#1565c0', marginBottom: '5px' }}>
-                        Monto Total Acumulado
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+                          marginBottom: '15px'
+                        }}>
+                          <div>
+                            <span style={{ fontSize: '1.1rem' }}>Proyecto: <strong>{projectName}</strong></span>
+                            <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '5px' }}>
+                              {txs.length} {txs.length === 1 ? 'Orden' : 'Órdenes'}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#28a745' }}>
+                              ${formatCurrency(projectTotal)}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#666' }}>Total Proyecto</div>
+                          </div>
+                        </h4>
+                        <table className="data-table oc-table">
+                          <thead>
+                            <tr>
+                              <th style={{ width: '15%' }}>DOC ID</th>
+                              <th style={{ width: '35%' }}>PROVEEDOR</th>
+                              <th style={{ width: '15%' }}>FECHA OC</th>
+                              <th style={{ width: '20%', textAlign: 'right' }}>TOTAL OC</th>
+                              <th style={{ width: '15%', textAlign: 'center' }}>ACCIÓN</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {txs.map(tx => (
+                              <tr key={tx.ID}>
+                                <td style={{ fontWeight: '600', color: '#1976d2' }}>{tx.DocID}</td>
+                                <td>
+                                  <div>{tx.VendorName}</div>
+                                  {tx.VendorFiscalID && (
+                                    <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '2px' }}>
+                                      RNC: {tx.VendorFiscalID}
+                                    </div>
+                                  )}
+                                </td>
+                                <td style={{ whiteSpace: 'nowrap' }}>{new Date(tx.DocDate).toLocaleDateString('es-ES')}</td>
+                                <td style={{ textAlign: 'right', fontWeight: '600', color: '#28a745' }}>${formatCurrency(tx.TotalAmount)}</td>
+                                <td style={{ textAlign: 'center' }}>
+                                  <button className="btn-small" onClick={() => window.open(`/?generateBoletin=${tx.ID}`, '_blank')}>Seleccionar</button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                      <div style={{ 
-                        fontSize: '2rem', 
-                        fontWeight: '700', 
-                        color: '#0d47a1',
-                        letterSpacing: '-0.5px'
-                      }}>
-                        ${formatCurrency(filteredTxs.reduce((sum, tx) => sum + tx.TotalAmount, 0))}
+                    );
+                  })}
+
+                  {/* Total General de Órdenes */}
+                  {filteredTxs.length > 0 && (
+                    <div style={{
+                      marginTop: '30px',
+                      padding: '20px 30px',
+                      background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
+                      borderRadius: '12px',
+                      border: '2px solid #1976d2',
+                      boxShadow: '0 4px 12px rgba(25,118,210,0.15)'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <h4 style={{ margin: '0 0 8px 0', fontSize: '1.2rem', color: '#0d47a1' }}>
+                            📊 Resumen Total de Órdenes
+                          </h4>
+                          <p style={{ margin: 0, color: '#1565c0', fontSize: '0.9rem' }}>
+                            {filteredTxs.length} {filteredTxs.length === 1 ? 'orden generada' : 'órdenes generadas'} • {Object.keys(groupedTransactions).length} {Object.keys(groupedTransactions).length === 1 ? 'proyecto' : 'proyectos'}
+                          </p>
+                          <button
+                            onClick={exportToExcel}
+                            style={{
+                              marginTop: '12px',
+                              padding: '10px 20px',
+                              backgroundColor: '#28a745',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontSize: '0.9rem',
+                              fontWeight: '600',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}
+                          >
+                            <span>📊</span> Exportar a Excel
+                          </button>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '0.85rem', color: '#1565c0', marginBottom: '5px' }}>
+                            Monto Total Acumulado
+                          </div>
+                          <div style={{
+                            fontSize: '2rem',
+                            fontWeight: '700',
+                            color: '#0d47a1',
+                            letterSpacing: '-0.5px'
+                          }}>
+                            ${formatCurrency(filteredTxs.reduce((sum, tx) => sum + tx.TotalAmount, 0))}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              )}
-              </>
+                  )}
+                </>
               )}
             </div>
           )}
-          
+
           {/* Botón flotante para cerrar en nueva pestaña */}
           {isNewTab && (
-            <button 
+            <button
               className="floating-close-btn"
               onClick={() => window.close()}
               title="Cerrar ventana"
@@ -2102,34 +2122,42 @@ export const BoletinMedicion: React.FC = () => {
         <div className="boletin-form">
           <div className="header-info card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3>{editingId ? `Editando Boletín: ${savedBoletines.find(b=>b.id===editingId)?.docNumber}` : `Generando Boletín para: ${selectedTx.DocID}`}</h3>
+              <h3>{editingId ? `Editando Boletín: ${savedBoletines.find(b => b.id === editingId)?.docNumber}` : `Generando Boletín para: ${selectedTx.DocID}`}</h3>
               <button className="btn-small" onClick={handleClose}>
                 {isNewTab ? 'Cerrar Ventana' : 'Cancelar'}
               </button>
             </div>
-            <p><strong>Proveedor:</strong> {selectedTx.VendorName}</p>
-            {selectedTx.VendorFiscalID && (
-              <p><strong>RNC/Cédula:</strong> {selectedTx.VendorFiscalID}</p>
-            )}
-            <p><strong>Proyecto:</strong> {selectedTx.ProjectName || 'General'}</p>
-            {measurementStartDate && measurementEndDate && (() => {
-              // Parsear fechas sin problemas de zona horaria
-              const startDate = new Date(measurementStartDate.split('T')[0] + 'T12:00:00').toLocaleDateString('es-ES');
-              const endDate = new Date(measurementEndDate.split('T')[0] + 'T12:00:00').toLocaleDateString('es-ES');
-              return <p><strong>Periodo:</strong> Desde {startDate} y hasta {endDate}</p>;
-            })()}
-            {(() => {
-              const selectedReceptionSet = new Set<string>();
-              linesToPay.forEach((line) => {
-                if (line.selected && line.receptionNumbers) {
-                  line.receptionNumbers.split(',').forEach((r: string) => {
-                    if (r.trim()) selectedReceptionSet.add(r.trim());
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div>
+                <p><strong>Cubicación N°:</strong> <span style={{ color: '#1976d2', fontWeight: 'bold', fontSize: '1.1rem' }}>{editingId ? (savedBoletines.find(b => b.id === editingId)?.cubicacionNo || '(Se asignará al guardar)') : '(Por asignar)'}</span></p>
+                <p><strong>Proveedor:</strong> {selectedTx.VendorName}</p>
+                {selectedTx.VendorFiscalID && (
+                  <p><strong>RNC/Cédula:</strong> {selectedTx.VendorFiscalID}</p>
+                )}
+              </div>
+              <div>
+                <p><strong>Proyecto:</strong> {selectedTx.ProjectName || 'General'}</p>
+                {measurementStartDate && measurementEndDate && (() => {
+                  // Parsear fechas sin problemas de zona horaria
+                  const startDate = new Date(measurementStartDate.split('T')[0] + 'T12:00:00').toLocaleDateString('es-ES');
+                  const endDate = new Date(measurementEndDate.split('T')[0] + 'T12:00:00').toLocaleDateString('es-ES');
+                  return <p><strong>Periodo:</strong> Desde {startDate} y hasta {endDate}</p>;
+                })()}
+                {(() => {
+                  const selectedReceptionSet = new Set<string>();
+                  linesToPay.forEach((line) => {
+                    if (line.selected && line.receptionNumbers) {
+                      line.receptionNumbers.split(',').forEach((r: string) => {
+                        if (r.trim()) selectedReceptionSet.add(r.trim());
+                      });
+                    }
                   });
-                }
-              });
-              const receptionNumbers = Array.from(selectedReceptionSet).join(', ');
-              return receptionNumbers ? <p><strong>Recepciones Incluidas:</strong> {receptionNumbers}</p> : null;
-            })()}
+                  const receptionNumbers = Array.from(selectedReceptionSet).join(', ');
+                  return receptionNumbers ? <p><strong>Recepciones Incluidas:</strong> {receptionNumbers}</p> : null;
+                })()}
+              </div>
+            </div>
           </div>
 
           <div className="card" style={{ marginTop: '20px' }}>
@@ -2138,21 +2166,22 @@ export const BoletinMedicion: React.FC = () => {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Sel.</th>
+                    <th style={{ width: '40px', textAlign: 'center' }}>Sel.</th>
                     <th>Descripción</th>
-                    <th style={{ width: '80px', textAlign: 'center' }}>Contratado</th>
-                    <th style={{ width: '80px', textAlign: 'center' }}>Anterior</th>
-                    <th style={{ width: '80px', textAlign: 'center' }}>Disponible</th>
+                    <th style={{ width: '90px', textAlign: 'right' }}>Contratado</th>
+                    <th style={{ width: '90px', textAlign: 'right' }}>Medido</th>
+                    <th style={{ width: '90px', textAlign: 'right' }}>Anterior</th>
+                    <th style={{ width: '90px', textAlign: 'right' }}>Disponible</th>
                     <th style={{ width: '100px', textAlign: 'center' }}>Cant. a Pagar</th>
-                    <th style={{ width: '140px' }}>Recepción</th>
-                    <th style={{ width: '220px' }}>Unidad</th>
-                    <th>Precio Unit.</th>
-                    <th>Impuesto</th>
-                    <th style={{ textAlign: 'right', width: '100px' }}>Total Impuesto</th>
-                    <th style={{ width: '160px' }}>Ret. ITBIS %</th>
-                    <th style={{ width: '160px' }}>Retención</th>
-                    <th style={{ textAlign: 'right', width: '100px' }}>Retenido</th>
-                    <th style={{ textAlign: 'right', width: '110px' }}>Subtotal</th>
+                    <th style={{ width: '150px', textAlign: 'center' }}>Recepción</th>
+                    <th style={{ width: '220px', textAlign: 'center' }}>Unidad</th>
+                    <th style={{ width: '110px', textAlign: 'right' }}>Precio Unit.</th>
+                    <th style={{ width: '120px', textAlign: 'center' }}>Impuesto</th>
+                    <th style={{ width: '110px', textAlign: 'right' }}>Total Imp.</th>
+                    <th style={{ width: '130px', textAlign: 'center' }}>Ret. ITBIS %</th>
+                    <th style={{ width: '150px', textAlign: 'center' }}>Retención</th>
+                    <th style={{ width: '110px', textAlign: 'right' }}>Retenido</th>
+                    <th style={{ width: '120px', textAlign: 'right' }}>Subtotal</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2172,50 +2201,52 @@ export const BoletinMedicion: React.FC = () => {
                     return (
                       <tr key={idx} style={{ backgroundColor: isOverpaid ? '#fff5f5' : 'inherit' }}>
                         <td>
-                          <input 
-                            type="checkbox" 
-                            checked={line.selected} 
+                          <input
+                            type="checkbox"
+                            checked={line.selected}
                             onChange={(e) => updateLine(idx, 'selected', e.target.checked)}
                             disabled={!canSelectLine}
                             title={!canSelectLine ? 'Partida sin medición registrada o sin cantidad disponible' : ''}
                           />
                         </td>
                         <td>{line.description}</td>
-                        <td style={{ textAlign: 'center' }}>{item?.ReceivedQuantity}</td>
-                        <td style={{ textAlign: 'center', color: '#666' }}>{paidByOthers}</td>
-                        <td style={{ textAlign: 'center', fontWeight: 'bold', color: available > 0 ? '#28a745' : '#d32f2f' }}>
-                          {available}
+                        <td style={{ textAlign: 'right', paddingRight: '10px' }}>{item?.OrderedQuantity}</td>
+                        <td style={{ textAlign: 'right', paddingRight: '10px', color: '#666' }}>{item?.ReceivedQuantity}</td>
+                        <td style={{ textAlign: 'right', paddingRight: '10px', color: '#666' }}>{paidByOthers}</td>
+                        <td style={{ textAlign: 'right', paddingRight: '10px', fontWeight: 'bold' }}>
+                          <span style={{ color: available > 0 ? '#28a745' : '#d32f2f' }}>{available}</span>
                           {!hasRegisteredMeasurement && (
-                            <div style={{ color: '#d32f2f', fontSize: '0.7rem', marginTop: '2px' }}>Sin medición</div>
+                            <div style={{ color: '#d32f2f', fontSize: '0.65rem', fontWeight: 'normal', marginTop: '-2px' }}>Sin medición</div>
                           )}
                         </td>
-                        <td>
-                          <input 
-                            type="number" 
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="number"
                             value={line.quantity}
                             onChange={(e) => updateLine(idx, 'quantity', Number(e.target.value))}
-                            style={{ 
-                              width: '80px', 
+                            style={{
+                              width: '75px',
+                              textAlign: 'right',
                               borderColor: isOverpaid ? '#d32f2f' : '#ddd',
-                              backgroundColor: isOverpaid ? '#f5f5f5' : '#f9f9f9',
-                              cursor: 'not-allowed'
+                              backgroundColor: isOverpaid ? '#fff5f5' : '#f9f9f9',
+                              padding: '4px 8px'
                             }}
                             disabled={!line.selected}
                             readOnly
                             max={available}
                           />
-                          {isOverpaid && <div style={{ color: '#d32f2f', fontSize: '0.7rem', marginTop: '2px' }}>Excede disponible</div>}
+                          {isOverpaid && <div style={{ color: '#d32f2f', fontSize: '0.65rem', marginTop: '2px' }}>Excede</div>}
                         </td>
-                        <td>
-                          <input 
-                            type="text" 
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="text"
                             value={line.receptionNumbers || ''}
                             onChange={(e) => updateLine(idx, 'receptionNumbers', e.target.value)}
                             placeholder="Ej: ICI-RIN00001"
-                            style={{ 
+                            style={{
                               width: '130px',
-                              fontSize: '0.85rem',
-                              padding: '4px 6px',
+                              fontSize: '0.8rem',
+                              padding: '4px 8px',
                               border: '1px solid #ddd',
                               borderRadius: '4px',
                               backgroundColor: line.selected ? '#fff' : '#f5f5f5'
@@ -2254,108 +2285,86 @@ export const BoletinMedicion: React.FC = () => {
                             </div>
                           )}
                         </td>
-                        <td>${formatCurrency(line.unitPrice)}</td>
-                      <td>
-                        <select 
-                          value={line.taxType} 
-                          onChange={(e) => updateLine(idx, 'taxType', e.target.value)}
-                          disabled={!line.selected}
-                        >
-                          <option value="ITBIS 18%">ITBIS 18%</option>
-                          <option value="Exento 0%">Exento 0%</option>
-                        </select>
-                      </td>
-                      <td style={{ textAlign: 'right', color: line.selected ? '#ff9800' : '#999', fontWeight: '500' }}>
-                        {line.selected ? `+$${formatCurrency((line.quantity * line.unitPrice) * (line.taxPercent / 100))}` : '$0.00'}
-                      </td>
-                      <td>
-                        <select 
-                          value={line.itbisRetentionPercent || 0}
-                          onChange={(e) => updateLine(idx, 'itbisRetentionPercent', Number(e.target.value))}
-                          disabled={!line.selected || line.taxPercent === 0}
-                          style={{ 
-                            width: '160px',
-                            fontSize: '0.85rem',
-                            padding: '6px 10px',
-                            border: '1px solid #ddd',
-                            borderRadius: '4px',
-                            backgroundColor: (line.selected && line.taxPercent > 0) ? '#fff' : '#f5f5f5',
-                            cursor: (line.selected && line.taxPercent > 0) ? 'pointer' : 'not-allowed'
-                          }}
-                        >
-                          <option value={0}>No retener (0%)</option>
-                          <option value={10}>Retener 10%</option>
-                          <option value={100}>Retener 100%</option>
-                        </select>
-                      </td>
-                      <td>
-                        <select 
-                          value={line.retentionPercent || 0}
-                          onChange={(e) => updateLine(idx, 'retentionPercent', Number(e.target.value))}
-                          disabled={!line.selected}
-                          style={{ 
-                            width: '160px',
-                            fontSize: '0.85rem',
-                            padding: '6px 10px',
-                            border: '1px solid #ddd',
-                            borderRadius: '4px',
-                            backgroundColor: line.selected ? '#fff' : '#f5f5f5',
-                            cursor: line.selected ? 'pointer' : 'not-allowed'
-                          }}
-                        >
-                          <option value={0}>Sin retención (0%)</option>
-                          {availableRetentions.map(ret => (
-                            <option key={ret.id} value={ret.percentage}>
-                              {ret.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td style={{ textAlign: 'right', color: line.selected ? '#d32f2f' : '#999', fontWeight: '500' }}>
-                        {line.selected ? `-$${formatCurrency((line.quantity * line.unitPrice) * ((line.retentionPercent || 0) / 100))}` : '$0.00'}
-                      </td>
-                      <td style={{ textAlign: 'right', fontWeight: line.selected ? 'bold' : 'normal', color: line.selected ? '#000' : '#999' }}>
-                        {line.selected ? `$${formatCurrency(
-                          (line.quantity * line.unitPrice) * (1 + (line.taxPercent / 100)) 
-                          - (line.quantity * line.unitPrice) * ((line.retentionPercent || 0) / 100)
-                          - ((line.quantity * line.unitPrice) * (line.taxPercent / 100)) * ((line.itbisRetentionPercent || 0) / 100)
-                        )}` : '$0.00'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+                        <td style={{ textAlign: 'right', paddingRight: '10px' }}>${formatCurrency(line.unitPrice)}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <select
+                            value={line.taxType}
+                            onChange={(e) => updateLine(idx, 'taxType', e.target.value)}
+                            disabled={!line.selected}
+                            style={{ width: '100px', padding: '4px', fontSize: '0.8rem' }}
+                          >
+                            <option value="ITBIS 18%">ITBIS 18%</option>
+                            <option value="Exento 0%">Exento 0%</option>
+                          </select>
+                        </td>
+                        <td style={{ textAlign: 'right', color: line.selected ? '#ff9800' : '#999', fontWeight: '500' }}>
+                          {line.selected ? `+$${formatCurrency((line.quantity * line.unitPrice) * (line.taxPercent / 100))}` : '$0.00'}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <select
+                            value={line.itbisRetentionPercent || 0}
+                            onChange={(e) => updateLine(idx, 'itbisRetentionPercent', Number(e.target.value))}
+                            disabled={!line.selected || line.taxPercent === 0}
+                            style={{
+                              width: '120px',
+                              fontSize: '0.8rem',
+                              padding: '4px 8px',
+                              border: '1px solid #ddd',
+                              borderRadius: '4px',
+                              backgroundColor: (line.selected && line.taxPercent > 0) ? '#fff' : '#f5f5f5',
+                              cursor: (line.selected && line.taxPercent > 0) ? 'pointer' : 'not-allowed'
+                            }}
+                          >
+                            <option value={0}>0%</option>
+                            <option value={10}>10%</option>
+                            <option value={100}>100%</option>
+                          </select>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <select
+                            value={line.retentionPercent || 0}
+                            onChange={(e) => updateLine(idx, 'retentionPercent', Number(e.target.value))}
+                            disabled={!line.selected}
+                            style={{
+                              width: '130px',
+                              fontSize: '0.8rem',
+                              padding: '4px 8px',
+                              border: '1px solid #ddd',
+                              borderRadius: '4px',
+                              backgroundColor: line.selected ? '#fff' : '#f5f5f5',
+                              cursor: line.selected ? 'pointer' : 'not-allowed'
+                            }}
+                          >
+                            <option value={0}>0%</option>
+                            {availableRetentions.map(ret => (
+                              <option key={ret.id} value={ret.percentage}>
+                                {ret.percentage}% - {ret.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td style={{ textAlign: 'right', paddingRight: '10px', color: line.selected ? '#d32f2f' : '#999', fontWeight: '500' }}>
+                          {line.selected ? `-${formatCurrency((line.quantity * line.unitPrice) * ((line.retentionPercent || 0) / 100))}` : '0.00'}
+                        </td>
+                        <td style={{ textAlign: 'right', paddingRight: '10px', fontWeight: line.selected ? 'bold' : 'normal', color: line.selected ? '#000' : '#999' }}>
+                          {line.selected ? `${formatCurrency(
+                            (line.quantity * line.unitPrice) * (1 + (line.taxPercent / 100))
+                            - (line.quantity * line.unitPrice) * ((line.retentionPercent || 0) / 100)
+                            - ((line.quantity * line.unitPrice) * (line.taxPercent / 100)) * ((line.itbisRetentionPercent || 0) / 100)
+                          )}` : '0.00'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
               </table>
             )}
           </div>
 
-          <div className="totals-section card" style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px' }}>
-            <div className="retentions-panel">
-              <h4 style={{ marginBottom: '20px', borderBottom: '2px solid #1976d2', paddingBottom: '10px' }}>Retenciones y Deducciones</h4>
-              
-              {/* Retenciones aplicadas por línea */}
-              {getRetentionsSummary().length > 0 && (
-                <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f5f5f5', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
-                  <h5 style={{ margin: '0 0 10px 0', color: '#666', fontSize: '0.9rem', fontWeight: 600 }}>📋 Retenciones por Línea</h5>
-                  {getRetentionsSummary().map((ret, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', padding: '8px', backgroundColor: '#fff', borderRadius: '4px' }}>
-                      <span style={{ fontSize: '0.85rem', color: '#555' }}>
-                        <strong>{ret.name}</strong> ({ret.percent}%)
-                      </span>
-                      <span style={{ color: '#d32f2f', fontWeight: '600', fontSize: '0.9rem' }}>${formatCurrency(ret.total)}</span>
-                    </div>
-                  ))}
-                  <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #ddd', display: 'flex', justifyContent: 'space-between' }}>
-                    <strong style={{ fontSize: '0.9rem' }}>Total Retenciones:</strong>
-                    <strong style={{ color: '#d32f2f', fontSize: '0.95rem' }}>${formatCurrency(totals.totalRetentionByLine)}</strong>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="summary-panel" style={{ padding: '20px', backgroundColor: '#fafafa', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
+          <div className="totals-section card" style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
+            <div className="summary-panel" style={{ padding: '20px', backgroundColor: '#fafafa', borderRadius: '8px', border: '1px solid #e0e0e0', width: '100%', maxWidth: '600px' }}>
               <h4 style={{ marginBottom: '20px', borderBottom: '2px solid #1976d2', paddingBottom: '10px' }}>💰 Resumen Económico</h4>
-              
+
               <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#fff', borderRadius: '6px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.95rem' }}>
                   <span>Subtotal:</span>
@@ -2370,7 +2379,7 @@ export const BoletinMedicion: React.FC = () => {
                   <strong>${formatCurrency(totals.subTotal + totals.totalTax)}</strong>
                 </div>
               </div>
-              
+
               {(totals.totalRetentionByLine > 0 || totals.totalItbisRetention > 0 || totals.retAmount > 0 || totals.advAmount > 0 || totals.isrAmount > 0) && (
                 <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#fff3e0', borderRadius: '6px', border: '1px solid #ffb74d' }}>
                   <h5 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: '#e65100' }}>Deducciones Aplicadas:</h5>
@@ -2410,30 +2419,30 @@ export const BoletinMedicion: React.FC = () => {
                   </div>
                 </div>
               )}
-              
+
               <div style={{ padding: '20px', backgroundColor: '#e3f2fd', borderRadius: '6px', border: '2px solid #1976d2', marginBottom: '15px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '1.1rem', fontWeight: '600', color: '#1976d2' }}>Neto a Pagar:</span>
                   <strong style={{ fontSize: '1.4rem', color: '#1976d2' }}>${formatCurrency(totals.net)}</strong>
                 </div>
               </div>
-              
-              <button 
-                className="btn-secondary" 
+
+              <button
+                className="btn-secondary"
                 style={{ marginTop: '10px', width: '100%', padding: '12px', fontSize: '0.95rem', fontWeight: '600', background: '#6c757d' }}
-                disabled={linesToPay.filter(l=>l.selected).length === 0}
+                disabled={linesToPay.filter(l => l.selected).length === 0}
                 onClick={() => {
                   console.log('🔍 DEBUG Vista Previa - measurementStartDate:', measurementStartDate);
                   console.log('🔍 DEBUG Vista Previa - measurementEndDate:', measurementEndDate);
                   console.log('🔍 DEBUG Vista Previa - selectedTx:', selectedTx);
-                  console.log('🔍 DEBUG Vista Previa - linesToPay seleccionadas:', linesToPay.filter(l=>l.selected).length);
-                  
+                  console.log('🔍 DEBUG Vista Previa - linesToPay seleccionadas:', linesToPay.filter(l => l.selected).length);
+
                   // Calcular totales
                   const totalsCalc = calculateTotals();
                   console.log('💰 Totales calculados:', totalsCalc);
-                  
+
                   const tempBoletin = {
-                    docNumber: editingId ? savedBoletines.find(b=>b.id===editingId)?.docNumber : 'PREVIEW',
+                    docNumber: editingId ? savedBoletines.find(b => b.id === editingId)?.docNumber : 'PREVIEW',
                     date: new Date(),
                     docID: selectedTx?.DocID || 'N/A',
                     vendorName: selectedTx?.VendorName || 'N/A',
@@ -2441,13 +2450,14 @@ export const BoletinMedicion: React.FC = () => {
                     projectName: selectedTx?.ProjectName || 'General',
                     measurementStartDate,
                     measurementEndDate,
-                    receptionNumbers: [...new Set(linesToPay.filter(l=>l.selected).flatMap(l => l.receptionNumbers.split(',').map((r:string) => r.trim()).filter((r:string)=>r)))].join(', '),
-                    lines: linesToPay.filter(l=>l.selected),
+                    receptionNumbers: [...new Set(linesToPay.filter(l => l.selected).flatMap(l => l.receptionNumbers.split(',').map((r: string) => r.trim()).filter((r: string) => r)))].join(', '),
+                    lines: linesToPay.filter(l => l.selected),
                     retentionPercent,
                     advancePercent,
                     isrPercent,
-                    status: editingId ? savedBoletines.find(b=>b.id===editingId)?.status : 'PENDIENTE',
-                    rejectionReason: editingId ? savedBoletines.find(b=>b.id===editingId)?.rejectionReason : null,
+                    cubicacionNo: editingId ? savedBoletines.find(b => b.id === editingId)?.cubicacionNo : '(Por asignar)',
+                    status: editingId ? savedBoletines.find(b => b.id === editingId)?.status : 'PENDIENTE',
+                    rejectionReason: editingId ? savedBoletines.find(b => b.id === editingId)?.rejectionReason : null,
                     // Agregar totales calculados
                     subTotal: totalsCalc.subTotal,
                     taxAmount: totalsCalc.totalTax,
@@ -2456,28 +2466,28 @@ export const BoletinMedicion: React.FC = () => {
                     isrAmount: totalsCalc.isrAmount,
                     netTotal: totalsCalc.net
                   };
-                  
+
                   console.log('📄 Generando PDF con objeto completo:', tempBoletin);
                   generatePDF(tempBoletin);
                 }}
               >
                 📄 Vista Previa PDF
               </button>
-              
-              <button 
-                className="btn-primary" 
+
+              <button
+                className="btn-primary"
                 style={{ marginTop: '10px', width: '100%', padding: '15px', fontSize: '1rem', fontWeight: '600' }}
-                disabled={isSaving || linesToPay.filter(l=>l.selected).length === 0}
+                disabled={isSaving || linesToPay.filter(l => l.selected).length === 0}
                 onClick={saveBoletin}
               >
-                {isSaving ? '⏳ Guardando...' : (editingId ? '📝 Actualizar Boletín' : '✅ Generar Solicitud de Pago')}
+                {isSaving ? '⏳ Guardando...' : (editingId ? '📝 Actualizar Boletín' : '✅ Generar Boletín')}
               </button>
             </div>
           </div>
-          
+
           {/* Botón flotante para cerrar en nueva pestaña */}
           {isNewTab && (
-            <button 
+            <button
               className="floating-close-btn"
               onClick={handleClose}
               title="Cerrar ventana"
@@ -2527,13 +2537,14 @@ export const BoletinMedicion: React.FC = () => {
         .table-responsive { width: 100%; overflow-x: auto; margin-top: 20px; }
         .data-table { width: 100%; border-collapse: collapse; min-width: 1200px; font-size: 0.95rem; }
         
-        /* Optimización para pantallas 24" */
+        /* Optimización para pantallas 24" - Más compacto para evitar zoom del browser */
         @media (min-width: 1600px) {
-          .boletin-container { padding: 20px 30px; }
-          .data-table { font-size: 1rem; }
+          .boletin-container { padding: 10px 15px; }
+          .data-table { font-size: 0.85rem; }
+          .card { padding: 16px; }
         }
-        .data-table th { background: #f8f9fa; color: #333; font-weight: 600; text-transform: uppercase; font-size: 0.85rem; }
-        .data-table th, .data-table td { padding: 12px 15px; border-bottom: 1px solid #eee; text-align: left; }
+        .data-table th { background: #f1f3f5; color: #444; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; border-top: 1px solid #dee2e6; }
+        .data-table th, .data-table td { padding: 10px 12px; border-bottom: 1px solid #eee; text-align: left; vertical-align: middle; }
         
         /* Estilos optimizados para tabla de historial en pantallas grandes */
         .history-table thead th { 
@@ -2579,20 +2590,20 @@ export const BoletinMedicion: React.FC = () => {
         
         @media (min-width: 1920px) {
           .history-table thead th {
-            font-size: 0.85rem;
-            padding: 16px 20px;
+            font-size: 0.75rem;
+            padding: 10px 12px;
           }
           .history-table tbody td {
-            padding: 16px 20px;
-            font-size: 1rem;
+            padding: 10px 12px;
+            font-size: 0.85rem;
           }
           .oc-table thead th {
-            font-size: 0.85rem;
-            padding: 16px 20px;
+            font-size: 0.75rem;
+            padding: 10px 12px;
           }
           .oc-table tbody td {
-            padding: 16px 20px;
-            font-size: 1rem;
+            padding: 10px 12px;
+            font-size: 0.85rem;
           }
         }
         

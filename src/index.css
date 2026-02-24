@@ -54,10 +54,10 @@ a:hover {
   min-height: 100vh;
 }
 
-/* Optimización para pantallas grandes (24") */
+/* Optimización para pantallas grandes (24") - Más compacto */
 @media (min-width: 1600px) {
   .main-content {
-    padding: 2rem 3rem;
+    padding: 1rem 2rem;
   }
 }
 
@@ -77,10 +77,10 @@ a:hover {
   --sidebar-transition-speed: 0.18s;
 }
 
-/* Sidebar compacto para pantallas grandes */
+/* Sidebar optimizado para pantallas grandes */
 @media (min-width: 1600px) {
   .main-sidebar {
-    width: 260px;
+    width: 240px; /* Mantener ancho estándar para evitar desperdicio de espacio */
   }
 }
 

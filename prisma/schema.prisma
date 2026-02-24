@@ -93,6 +93,7 @@ model PaymentRequest {
   vendorName           String
   vendorFiscalID       String?              // RNC o Cédula del proveedor
   projectName          String?
+  cubicacionNo         Int?                 // Secuencia de cubicación por OC/Proveedor
   receptionNumbers     String?              // Ej: ICI-RIN00001, ICI-RIN00002
   measurementStartDate DateTime?            // Periodo de medición - desde
   measurementEndDate   DateTime?            // Periodo de medición - hasta

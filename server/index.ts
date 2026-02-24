@@ -28,7 +28,7 @@ app.get("/api/admcloud/subsidiaries/:id", async (req, res) => {
     }
     const empresa = result.recordset[0];
     res.json({ id: empresa.ID, name: empresa.Name });
-  } catch (error) {
+  } catch (error: any) {
     res.status(500).json({ message: "Error al consultar empresa", error: error.message });
   }
 });
@@ -45,7 +45,7 @@ app.get("/api/admcloud/subsidiaries/:id", async (req, res) => {
     }
     const empresa = result.recordset[0];
     res.json({ id: empresa.ID, name: empresa.Name });
-  } catch (error) {
+  } catch (error: any) {
     res.status(500).json({ message: "Error al consultar empresa", error: error.message });
   }
 });
@@ -55,7 +55,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "default_secret";
 const upload = multer({ storage: multer.memoryStorage() });
 
 console.log("-----------------------------------------");
-console.log("INICIANDO SERVIDOR SISTEMA DE OBRA v1.5");
+console.log("INICIANDO SERVIDOR SISTEMA DE OBRA v1.6");
 console.log("-----------------------------------------");
 
 app.use(cors({
@@ -910,8 +910,30 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
   } = req.body;
 
   try {
-    const count = await prisma.paymentRequest.count();
-    const docNumber = `BM-${(count + 1).toString().padStart(6, '0')}`;
+    // Generar docNumber global (BM-XXXXXX) de forma más robusta
+    const lastPR = await prisma.paymentRequest.findFirst({
+      orderBy: { id: 'desc' },
+      select: { id: true }
+    });
+    const nextId = (lastPR?.id || 0) + 1;
+    const docNumber = `BM-${nextId.toString().padStart(6, '0')}`;
+
+    // Calcular el número de cubicación correlativo para esta OC y Proveedor usando _max
+    const aggregate = await prisma.paymentRequest.aggregate({
+      _max: {
+        cubicacionNo: true
+      },
+      where: {
+        externalTxID,
+        vendorName: {
+          equals: normalizeVendorName(vendorName),
+          mode: 'insensitive'
+        }
+      }
+    });
+
+    const cubicacionNo = (aggregate._max.cubicacionNo || 0) + 1;
+
     const previousUnitsByItem = await getLastUnitsByItemForTx(externalTxID);
     const validUnitCodes = await getValidUnitCodes(lines || []);
 
@@ -970,6 +992,7 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
     const pr = await prisma.paymentRequest.create({
       data: {
         docNumber,
+        cubicacionNo,
         externalTxID,
         docID,
         vendorName: normalizeVendorName(vendorName),
@@ -1016,6 +1039,10 @@ app.get("/api/payment-requests", authenticateToken, async (req, res) => {
         }
       }
     });
+
+    const fs = await import('fs');
+    fs.appendFileSync('server_debug_log.txt', `[GET] ${new Date().toISOString()} Found ${prs.length} bulletins. First item cubicacionNo: ${prs[0]?.cubicacionNo}\n`);
+
     res.json(prs);
   } catch (error) {
     res.status(500).json({ message: "Error al obtener boletines" });
@@ -1060,6 +1087,30 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
 
     if (existingPR.status !== "PENDIENTE") {
       return res.status(400).json({ message: "Solo se pueden modificar boletines en estado PENDIENTE" });
+    }
+
+    // Si el boletín no tiene número de cubicación (boletines antiguos), asignarle uno ahora
+    let cubicacionNo = existingPR.cubicacionNo;
+    if (!cubicacionNo || cubicacionNo === 0) {
+      console.log(`🔧 Asignando número de cubicación automático para boletín antiguo: ${existingPR.docNumber}`);
+
+      const normalizedVName = normalizeVendorName(vendorName || existingPR.vendorName);
+      const aggregate = await prisma.paymentRequest.aggregate({
+        _max: { cubicacionNo: true },
+        where: {
+          externalTxID: existingPR.externalTxID,
+          vendorName: {
+            equals: normalizedVName,
+            mode: 'insensitive'
+          }
+        }
+      });
+
+      cubicacionNo = (aggregate._max.cubicacionNo || 0) + 1;
+
+      // Log detallado a consola y opcionalmente a archivo si fuera necesario
+      console.log(`📊 DB Stats for ${existingPR.docID}: Max existing=${aggregate._max.cubicacionNo}, New=${cubicacionNo}`);
+      console.log(`   Criteria: TxID=${existingPR.externalTxID}, Vendor=${normalizedVName} or ${existingPR.vendorName}`);
     }
 
     const previousUnitsByItem = await getLastUnitsByItemForTx(existingPR.externalTxID, prId);
@@ -1138,6 +1189,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
           isrAmount,
           netTotal,
           receptionNumbers,
+          cubicacionNo,
           vendorName: vendorName ? normalizeVendorName(vendorName) : existingPR.vendorName,
           vendorFiscalID,
           measurementStartDate: measurementStartDate ? new Date(measurementStartDate) : null,
@@ -1147,6 +1199,9 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
         include: { lines: true }
       });
     });
+
+    const fs = await import('fs');
+    fs.appendFileSync('server_debug_log.txt', `[PUT] ${new Date().toISOString()} ID: ${prId} (${existingPR.docNumber}) assigned cubicacionNo: ${cubicacionNo}\n`);
 
     res.json(updatedPR);
   } catch (error: any) {
@@ -1698,12 +1753,12 @@ app.post("/api/payment-schedules/:id/send-to-finance", authenticateToken, async 
       return res.status(404).json({ message: "Programación no encontrada" });
     }
 
-    if (schedule.status !== 'APROBADA') {
-      return res.status(400).json({ message: "La programación debe estar aprobada antes de enviar a finanzas" });
-    }
-
     if (schedule.status === 'ENVIADA_FINANZAS') {
       return res.status(400).json({ message: "La programación ya fue enviada a finanzas" });
+    }
+
+    if (schedule.status !== 'APROBADA') {
+      return res.status(400).json({ message: "La programación debe estar aprobada antes de enviar a finanzas" });
     }
 
     const notApprovedRequests = schedule.lines
@@ -2085,3 +2140,45 @@ app.delete("/api/retentions/:id", authenticateToken, async (req: any, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
+// Reparación automática de números de cubicación faltantes al iniciar
+(async () => {
+  try {
+    const missingPRs = await prisma.paymentRequest.findMany({
+      where: {
+        OR: [
+          { cubicacionNo: null },
+          { cubicacionNo: 0 }
+        ]
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    if (missingPRs.length > 0) {
+      console.log(`🔧 Se detectaron ${missingPRs.length} boletines sin número de cubicación. Iniciando reparación...`);
+
+      for (const pr of missingPRs) {
+        const aggregate = await prisma.paymentRequest.aggregate({
+          _max: { cubicacionNo: true },
+          where: {
+            externalTxID: pr.externalTxID,
+            vendorName: {
+              equals: pr.vendorName,
+              mode: 'insensitive'
+            },
+            id: { lt: pr.id } // Buscar solo los anteriores para no incluirse a sí mismo si ya tuviera algo
+          }
+        });
+
+        const nextNo = (aggregate._max.cubicacionNo || 0) + 1;
+        await prisma.paymentRequest.update({
+          where: { id: pr.id },
+          data: { cubicacionNo: nextNo }
+        });
+      }
+      console.log('✅ Reparación de números de cubicación completada.');
+    }
+  } catch (err) {
+    console.error('❌ Error durante la reparación automática:', err);
+  }
+})();
