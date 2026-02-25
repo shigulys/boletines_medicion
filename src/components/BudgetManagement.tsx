@@ -81,9 +81,9 @@ export const BudgetManagement: React.FC = () => {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
-      
+
       console.log('Respuesta de eliminación:', response.status);
-      
+
       if (response.ok) {
         setMessage({ text: 'Presupuesto eliminado con éxito', type: 'success' });
         await fetchBudgets();
@@ -140,8 +140,8 @@ export const BudgetManagement: React.FC = () => {
     <div className="budget-management">
       <div className="budget-header-actions">
         <h2>Gestión de Presupuestos</h2>
-        <button 
-          className="btn-primary" 
+        <button
+          className="btn-primary"
           onClick={() => { setSelectedBudget(null); setMessage({ text: '', type: '' }); }}
         >
           {selectedBudget ? 'Volver a la lista' : 'Refrescar'}
@@ -161,28 +161,28 @@ export const BudgetManagement: React.FC = () => {
             <form onSubmit={handleFileUpload} className="upload-form">
               <div className="form-group">
                 <label>Nombre del Proyecto/Obra</label>
-                <input 
-                  type="text" 
-                  value={projectName} 
-                  onChange={(e) => setProjectName(e.target.value)} 
+                <input
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
                   placeholder="Ej: Edificio Miraflores"
                   required
                 />
               </div>
               <div className="form-group">
                 <label>Descripción (Opcional)</label>
-                <textarea 
-                  value={description} 
-                  onChange={(e) => setDescription(e.target.value)} 
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                   placeholder="Detalles adicionales..."
                   rows={3}
                 />
               </div>
               <div className="form-group">
                 <label>Archivo Excel</label>
-                <input 
-                  type="file" 
-                  accept=".xlsx, .xls" 
+                <input
+                  type="file"
+                  accept=".xlsx, .xls"
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
                   required
                 />
@@ -237,7 +237,7 @@ export const BudgetManagement: React.FC = () => {
             <h3>{selectedBudget.projectName}</h3>
             <p>{selectedBudget.description}</p>
           </div>
-          
+
           <section className="summary-section">
             <h4>Resumen por Capítulos</h4>
             <table className="data-table summary-table">
@@ -286,10 +286,10 @@ export const BudgetManagement: React.FC = () => {
                   const isTopografía = item.description.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('topografia');
                   const measuredQty = item.measurements?.reduce((acc, m) => acc + m.quantity, 0) || 0;
                   const progressPct = item.quantity > 0 ? (measuredQty / item.quantity) * 100 : 0;
-                  
+
                   return (
-                    <tr 
-                      key={item.id} 
+                    <tr
+                      key={item.id}
                       className={`${item.isChapter ? 'is-chapter' : ''} ${isTopografía ? 'highlight-topo' : ''}`}
                     >
                       <td>{item.code}</td>

@@ -33,7 +33,8 @@ export const Sidebar: React.FC<{
   onSelectRetentions: () => void;
   onSelectUnits: () => void;
   onSelectWarehouseAccess: () => void;
-}> = ({ activeTab, onSelectManagement, onSelectDashboard, onSelectBudget, onSelectAdmCloud, onSelectBoletin, onSelectPaymentScheduling, onSelectRetentions, onSelectUnits, onSelectWarehouseAccess }) => {
+  onSelectSignatureConfig: () => void;
+}> = ({ activeTab, onSelectManagement, onSelectDashboard, onSelectBudget, onSelectAdmCloud, onSelectBoletin, onSelectPaymentScheduling, onSelectRetentions, onSelectUnits, onSelectWarehouseAccess, onSelectSignatureConfig }) => {
   const { user, logout } = useAuth();
   const [openSection, setOpenSection] = useState<string | null>('Ingeniería');
 
@@ -123,7 +124,8 @@ export const Sidebar: React.FC<{
                     <li onClick={() => { console.log("Sidebar: Click Usuarios"); onSelectManagement(); }} style={{ cursor: 'pointer', fontWeight: activeTab === 'users' ? 'bold' : 'normal', color: activeTab === 'users' ? '#1976d2' : 'inherit' }}><span style={{ marginRight: '8px' }}>👥</span>Usuarios y Permisos</li>
                     <li onClick={() => { console.log("Sidebar: Click Retenciones"); onSelectRetentions(); }} style={{ cursor: 'pointer', fontWeight: activeTab === 'retentions' ? 'bold' : 'normal', color: activeTab === 'retentions' ? '#1976d2' : 'inherit' }}><span style={{ marginRight: '8px' }}>📊</span>Catálogo de Retenciones</li>
                     <li onClick={() => { console.log("Sidebar: Click Unidades"); onSelectUnits(); }} style={{ cursor: 'pointer', fontWeight: activeTab === 'units' ? 'bold' : 'normal', color: activeTab === 'units' ? '#1976d2' : 'inherit' }}><span style={{ marginRight: '8px' }}>📐</span>Unidades de Medida</li>
-                    <li onClick={() => { console.log("Sidebar: Click Almacenes"); onSelectWarehouseAccess(); }} style={{ cursor: 'pointer', fontWeight: activeTab === 'warehouseAccess' ? 'bold' : 'normal', color: activeTab === 'warehouseAccess' ? '#1976d2' : 'inherit' }}><span style={{ marginRight: '8px' }}>🏬</span>Acceso Almacenes</li>
+                    <li onClick={() => { onSelectWarehouseAccess(); }} style={{ cursor: 'pointer', fontWeight: activeTab === 'warehouseAccess' ? 'bold' : 'normal', color: activeTab === 'warehouseAccess' ? '#1976d2' : 'inherit' }}><span style={{ marginRight: '8px' }}>🏬</span>Acceso Almacenes</li>
+                    <li onClick={() => { onSelectSignatureConfig(); }} style={{ cursor: 'pointer', fontWeight: activeTab === 'signatureConfig' ? 'bold' : 'normal', color: activeTab === 'signatureConfig' ? '#1976d2' : 'inherit' }}><span style={{ marginRight: '8px' }}>✍️</span>Firmas del Boletín</li>
                   </ul>
                 </AccordionItem>
               </div>

@@ -113,6 +113,9 @@ export const BoletinMedicion: React.FC = () => {
   }>>([]);
   const [availableUnits, setAvailableUnits] = useState<UnitOfMeasureData[]>([]);
 
+  // Firmas globales (cargadas desde la configuración del sistema)
+  const [globalSignatures, setGlobalSignatures] = useState<{ name: string; role: string }[]>([]);
+
   const getLastUnitsByItem = (externalTxID: string, excludeBoletinId?: number | null) => {
     const unitsByItem = new Map<string, string>();
 
@@ -136,6 +139,10 @@ export const BoletinMedicion: React.FC = () => {
     fetchBoletinHistory();
     fetchActiveRetentions();
     fetchActiveUnits();
+    // Cargar configuración global de firmas
+    fetch('http://localhost:5000/api/signature-config', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    }).then(r => r.ok ? r.json() : []).then(setGlobalSignatures).catch(() => { });
     const params = new URLSearchParams(window.location.search);
     setIsNewTab(params.has('editBoletin') || params.has('generateBoletin') || params.has('boletinSelection'));
 
@@ -263,6 +270,12 @@ export const BoletinMedicion: React.FC = () => {
         console.error('Error al obtener fechas de medición:', error);
       }
     }
+
+    // Adjuntar firmas: usuario actual (Elaborado por) + firmas globales configuradas
+    boletinWithDates.signatures = [
+      { name: user?.name || user?.email || 'Usuario', role: user?.position || 'Elaborado por' },
+      ...globalSignatures.map((s: any) => ({ name: s.alias?.trim() || s.name, role: s.role }))
+    ];
 
     generatePDF(boletinWithDates);
   };
@@ -1447,9 +1460,77 @@ export const BoletinMedicion: React.FC = () => {
     doc.text(`NETO A PAGAR:`, labelX, currentY + 9);
     doc.text(`$${formatCurrency(boletin.netTotal)}`, valueX, currentY + 9, { align: 'right' });
 
+    // ===== SECCIÓN DE FIRMAS =====
+    const signatories: { name: string; role: string }[] = (() => {
+      if (!boletin.signatures) return [];
+      if (typeof boletin.signatures === 'string') {
+        try { return JSON.parse(boletin.signatures).filter((s: any) => s.name?.trim()); }
+        catch { return []; }
+      }
+      if (Array.isArray(boletin.signatures)) return boletin.signatures.filter((s: any) => s.name?.trim());
+      return [];
+    })();
+
+    if (signatories.length > 0) {
+      let sigY = currentY + 22;
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const neededHeight = 30 + signatories.length * 22;
+      if (sigY + neededHeight > pageHeight - 15) {
+        doc.addPage();
+        sigY = 20;
+      }
+
+      // Separador y título
+      doc.setLineWidth(0.3);
+      doc.line(14, sigY, 196, sigY);
+      sigY += 6;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(80);
+      doc.text('FIRMAS / APROBACIONES', 14, sigY);
+      sigY += 10;
+
+      // Columnas de firmas: máx 3 por fila
+      const cols = Math.min(signatories.length, 3);
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 14;
+      const colWidth = (pageWidth - margin * 2) / cols;
+      const lineLen = colWidth * 0.75;
+      const rowHeight = 22;
+
+      for (let i = 0; i < signatories.length; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const x = margin + col * colWidth;
+        const y = sigY + row * rowHeight;
+
+        // Nueva página si desbordamos
+        if (y + rowHeight > pageHeight - 15) {
+          doc.addPage();
+          sigY = 20;
+        }
+
+        doc.setLineWidth(0.5);
+        doc.setTextColor(0);
+        doc.line(x, y + 10, x + lineLen, y + 10);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.text(signatories[i].name, x, y + 15);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(100);
+        doc.text(signatories[i].role || '', x, y + 20);
+        doc.setTextColor(0);
+      }
+    }
+    // ============================
+
     // Open in new tab instead of download
     const string = doc.output('bloburl');
     window.open(string, '_blank');
+
   };
 
   const totals = calculateTotals();
@@ -2427,6 +2508,8 @@ export const BoletinMedicion: React.FC = () => {
                 </div>
               </div>
 
+
+
               <button
                 className="btn-secondary"
                 style={{ marginTop: '10px', width: '100%', padding: '12px', fontSize: '0.95rem', fontWeight: '600', background: '#6c757d' }}
@@ -2464,7 +2547,12 @@ export const BoletinMedicion: React.FC = () => {
                     retentionAmount: totalsCalc.retAmount,
                     advanceAmount: totalsCalc.advAmount,
                     isrAmount: totalsCalc.isrAmount,
-                    netTotal: totalsCalc.net
+                    netTotal: totalsCalc.net,
+                    // Usuario actual (Elaborado por) + firmas globales
+                    signatures: [
+                      { name: user?.name || user?.email || 'Usuario', role: user?.position || 'Elaborado por' },
+                      ...globalSignatures.map((s: any) => ({ name: s.alias?.trim() || s.name, role: s.role }))
+                    ]
                   };
 
                   console.log('📄 Generando PDF con objeto completo:', tempBoletin);

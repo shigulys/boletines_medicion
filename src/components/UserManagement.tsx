@@ -5,6 +5,7 @@ interface UserData {
   id: number;
   email: string;
   name: string | null;
+  position?: string | null;
   role: string;
   isApproved: boolean;
   accessIngenieria: boolean;
@@ -16,7 +17,7 @@ export const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<UserData[]>([]);
   const { token } = useAuth();
   const [loading, setLoading] = useState(true);
-  
+
   // States for the new user form
   const [showAddForm, setShowAddForm] = useState(false);
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'user' });
@@ -96,7 +97,7 @@ export const UserManagement: React.FC = () => {
     }
 
     console.log(`Cambiando ${field} para usuario ${userId}: ${currentValue} -> ${updatedValue}`);
-    
+
     try {
       const user = users.find(u => u.id === userId);
       if (!user) return;
@@ -115,14 +116,14 @@ export const UserManagement: React.FC = () => {
       if (response.ok) {
         const savedUser = await response.json();
         console.log('Servidor respondió con usuario actualizado:', savedUser);
-        
+
         // Aseguramos que el estado local use los valores actualizados y mantenga los existentes
         const finalUser = {
           ...user,
           ...savedUser,
           isApproved: typeof savedUser.isApproved === 'boolean' ? savedUser.isApproved : updatedValue
         };
-        
+
         setUsers(users.map(u => u.id === userId ? finalUser : u));
       } else {
         const errorData = await response.json();
@@ -141,9 +142,9 @@ export const UserManagement: React.FC = () => {
     <div className="dashboard-card" style={{ width: '100%', overflowX: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h2 style={{ margin: 0, color: '#1a1a1a' }}>Gestión de Usuarios</h2>
-        <button 
+        <button
           onClick={() => setShowAddForm(!showAddForm)}
-          className="btn-primary" 
+          className="btn-primary"
           style={{ width: 'auto', padding: '8px 16px', fontSize: '0.85rem' }}
         >
           {showAddForm ? 'Cancelar' : '+ Nuevo Usuario'}
@@ -156,33 +157,33 @@ export const UserManagement: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
             <div className="form-group">
               <label>Nombre</label>
-              <input 
-                className="form-input" 
-                type="text" 
+              <input
+                className="form-input"
+                type="text"
                 placeholder="Ej. Ing. Luis Garcia"
                 value={newUser.name}
-                onChange={e => setNewUser({...newUser, name: e.target.value})}
+                onChange={e => setNewUser({ ...newUser, name: e.target.value })}
                 required
               />
             </div>
             <div className="form-group">
               <label>Email</label>
-              <input 
-                className="form-input" 
-                type="email" 
+              <input
+                className="form-input"
+                type="email"
                 placeholder="correo@empresa.com"
                 value={newUser.email}
-                onChange={e => setNewUser({...newUser, email: e.target.value})}
+                onChange={e => setNewUser({ ...newUser, email: e.target.value })}
                 required
               />
             </div>
             <div className="form-group">
               <label>Contraseña Provisional</label>
-              <input 
-                className="form-input" 
+              <input
+                className="form-input"
                 type="password"
                 value={newUser.password}
-                onChange={e => setNewUser({...newUser, password: e.target.value})}
+                onChange={e => setNewUser({ ...newUser, password: e.target.value })}
                 required
               />
             </div>
@@ -211,9 +212,22 @@ export const UserManagement: React.FC = () => {
               <td style={{ padding: '12px' }}>
                 <div style={{ fontWeight: 600 }}>{user.name || 'Sin nombre'}</div>
                 <div style={{ fontSize: '0.8rem', color: '#666' }}>{user.email}</div>
+                <div style={{ marginTop: '4px' }}>
+                  <input
+                    type="text"
+                    placeholder="Cargo (ej: Residente de Obra)"
+                    defaultValue={user.position || ''}
+                    onBlur={e => {
+                      if (e.target.value !== (user.position || '')) {
+                        togglePermission(user.id, 'position' as any, e.target.value);
+                      }
+                    }}
+                    style={{ fontSize: '0.78rem', padding: '2px 6px', borderRadius: '4px', border: '1px solid #ccc', width: '100%', color: '#444' }}
+                  />
+                </div>
               </td>
               <td style={{ padding: '12px' }}>
-                <button 
+                <button
                   onClick={() => togglePermission(user.id, 'isApproved', user.isApproved)}
                   style={{
                     padding: '4px 8px',
@@ -229,30 +243,30 @@ export const UserManagement: React.FC = () => {
                 </button>
               </td>
               <td style={{ padding: '12px' }}>
-                <input 
-                  type="checkbox" 
-                  checked={user.accessIngenieria} 
+                <input
+                  type="checkbox"
+                  checked={user.accessIngenieria}
                   disabled={!user.isApproved}
                   onChange={() => togglePermission(user.id, 'accessIngenieria', user.accessIngenieria)}
                 />
               </td>
               <td style={{ padding: '12px' }}>
-                <input 
-                  type="checkbox" 
-                  checked={user.accessSubcontratos} 
+                <input
+                  type="checkbox"
+                  checked={user.accessSubcontratos}
                   onChange={() => togglePermission(user.id, 'accessSubcontratos', user.accessSubcontratos)}
                 />
               </td>
               <td style={{ padding: '12px' }}>
-                <input 
-                  type="checkbox" 
-                  checked={user.accessContabilidad} 
+                <input
+                  type="checkbox"
+                  checked={user.accessContabilidad}
                   onChange={() => togglePermission(user.id, 'accessContabilidad', user.accessContabilidad)}
                 />
               </td>
               <td style={{ padding: '12px' }}>
-                <select 
-                  value={user.role} 
+                <select
+                  value={user.role}
                   onChange={(e) => togglePermission(user.id, 'role', e.target.value)}
                   style={{ padding: '4px', borderRadius: '4px', border: '1px solid #ccc' }}
                 >

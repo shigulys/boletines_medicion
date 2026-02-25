@@ -8,7 +8,7 @@ async function run() {
     const client = new Client({ connectionString: DATABASE_URL });
     try {
         await client.connect();
-        const hashedPassword = await bcrypt.hash('admin123', 10);
+        const hashedPassword = await bcrypt.hash('123456', 10);
         await client.query('UPDATE "User" SET password = $1 WHERE email = $2', [hashedPassword, 'cmperezb@gmail.com']);
         console.log("Password reset successfully for cmperezb@gmail.com");
     } catch (err) {

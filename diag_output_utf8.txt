@@ -1,0 +1,36 @@
+﻿Conectado a DB
+
+=== BM-000005 ===
+{
+  "id": 5,
+  "docNumber": "BM-000005",
+  "externalTxID": "6A9F45B0-841A-42E2-022A-08DE324CA481",
+  "vendorName": "SERVICIOS JOHAN MANUEL SRL",
+  "cubicacionNo": 999,
+  "status": "PENDIENTE",
+  "createdAt": "2026-02-25T02:20:56.472Z"
+}
+
+externalTxID: 6A9F45B0-841A-42E2-022A-08DE324CA481
+vendorName: "SERVICIOS JOHAN MANUEL SRL"
+cubicacionNo actual: 999
+
+=== Todos los BM con mismo externalTxID ===
+  1. BM-000001 | vendor="ELECTRICOS JOHAN MANUEL SRL" | cubicacion=1 | status=APROBADO
+  2. BM-000002 | vendor="ELECTRICOS JOHAN MANUEL SRL" | cubicacion=2 | status=RECHAZADO
+  3. BM-000003 | vendor="ELECTRICOS JOHAN MANUEL SRL" | cubicacion=3 | status=RECHAZADO
+  4. BM-000004 | vendor="ELECTRICOS JOHAN MANUEL SRL" | cubicacion=4 | status=APROBADO
+  5. BM-000005 | vendor="SERVICIOS JOHAN MANUEL SRL" | cubicacion=999 | status=PENDIENTE
+
+=== Todos los BM con mismo OC + vendor (ILIKE) ===
+  1. BM-000005 | vendor="SERVICIOS JOHAN MANUEL SRL" | cubicacion=999 | status=PENDIENTE
+
+=== Stats (excluyendo RECHAZADOS) ===
+Total: 1, MAX cubicacionNo: 999
+
+=== TODOS los Payment Requests (para contexto) ===
+  ID=1 | BM-000001 | txID=6A9F45B0... | vendor="ELECTRICOS JOHAN MANUEL SRL" | cub=1 | status=APROBADO
+  ID=2 | BM-000002 | txID=6A9F45B0... | vendor="ELECTRICOS JOHAN MANUEL SRL" | cub=2 | status=RECHAZADO
+  ID=3 | BM-000003 | txID=6A9F45B0... | vendor="ELECTRICOS JOHAN MANUEL SRL" | cub=3 | status=RECHAZADO
+  ID=4 | BM-000004 | txID=6A9F45B0... | vendor="ELECTRICOS JOHAN MANUEL SRL" | cub=4 | status=APROBADO
+  ID=5 | BM-000005 | txID=6A9F45B0... | vendor="SERVICIOS JOHAN MANUEL SRL" | cub=999 | status=PENDIENTE

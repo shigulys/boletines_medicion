@@ -12,11 +12,12 @@ import { RetentionManagement } from './components/RetentionManagement'
 import { UnitOfMeasureManagement } from './components/UnitOfMeasureManagement'
 import { PaymentScheduling } from './components/PaymentScheduling'
 import WarehouseAccess from './components/WarehouseAccess'
+import { SignatureConfigManagement } from './components/SignatureConfigManagement'
 
 function App() {
   const { user, isLoading } = useAuth();
   const [view, setView] = useState<'login' | 'register'>('login');
-  const [activeTab, setActiveTabOriginal] = useState<'dashboard' | 'users' | 'budget' | 'admcloud' | 'boletin' | 'paymentScheduling' | 'retentions' | 'units' | 'warehouseAccess'>('dashboard');
+  const [activeTab, setActiveTabOriginal] = useState<'dashboard' | 'users' | 'budget' | 'admcloud' | 'boletin' | 'paymentScheduling' | 'retentions' | 'units' | 'warehouseAccess' | 'signatureConfig'>('dashboard');
   const setActiveTab = (tab: any) => {
     console.log(`App: Cambiando pestaña a: ${tab}`);
     setActiveTabOriginal(tab);
@@ -227,6 +228,9 @@ function App() {
       case 'warehouseAccess':
         return user?.role === 'admin' ? <WarehouseAccess /> : <div>No tiene permiso para acceder a esta sección.</div>;
 
+      case 'signatureConfig':
+        return user?.role === 'admin' ? <SignatureConfigWrapper /> : <div>No tiene permiso para acceder a esta sección.</div>;
+
       default:
         return <div>Sección no encontrada.</div>;
     }
@@ -247,6 +251,7 @@ function App() {
             onSelectRetentions={() => setActiveTab('retentions')}
             onSelectUnits={() => setActiveTab('units')}
             onSelectWarehouseAccess={() => setActiveTab('warehouseAccess')}
+            onSelectSignatureConfig={() => setActiveTab('signatureConfig')}
           />
           <main className="main-content">{renderContent()}</main>
         </>
@@ -330,6 +335,16 @@ const UnitsWrapper = () => (
       <p>Administración de unidades para uso en boletines de medición</p>
     </header>
     <UnitOfMeasureManagement />
+  </>
+);
+
+const SignatureConfigWrapper = () => (
+  <>
+    <header className="content-header">
+      <h1>Configuración de Firmas</h1>
+      <p>Firmas que aparecen en todos los PDFs del Boletín de Medición</p>
+    </header>
+    <SignatureConfigManagement />
   </>
 );
 

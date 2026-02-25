@@ -17,6 +17,7 @@ model User {
   email               String   @unique
   password            String
   name                String?
+  position            String?  // Cargo / Título del usuario
   role                String   @default("user")
   isApproved          Boolean  @default(false)
   accessIngenieria    Boolean  @default(false)
@@ -94,6 +95,7 @@ model PaymentRequest {
   vendorFiscalID       String?              // RNC o Cédula del proveedor
   projectName          String?
   cubicacionNo         Int?                 // Secuencia de cubicación por OC/Proveedor
+  signatures           String?              // JSON: [{name, role}] firmantes del boletín
   receptionNumbers     String?              // Ej: ICI-RIN00001, ICI-RIN00002
   measurementStartDate DateTime?            // Periodo de medición - desde
   measurementEndDate   DateTime?            // Periodo de medición - hasta
@@ -173,4 +175,13 @@ model PaymentRequestLine {
   retentionAmount  Decimal        @default(0) @db.Decimal(18, 6) // Monto retenido por línea
   itbisRetentionPercent Decimal   @default(0) @db.Decimal(18, 6) // Retención de ITBIS (0%, 10%, 100%)
   totalLine        Decimal        @db.Decimal(18, 6) // quantity * unitPrice + taxAmount - retentionAmount
+}
+
+// Configuración global de firmas del Boletín de Medición
+model SignatureConfig {
+  id        Int    @id @default(autoincrement())
+  name      String              // Nombre completo (de AdmCloud)
+  alias     String?             // Abreviatura para mostrar en PDF
+  role      String
+  sortOrder Int    @default(0)
 }

@@ -14,9 +14,7 @@ import { sendApprovalEmail, sendNewRequestEmailToAdmin } from "./mail";
 
 dotenv.config();
 
-console.log("----------------------------------------");
-console.log(`DATABASE_URL: ${process.env.DATABASE_URL}`);
-console.log("----------------------------------------");
+// DATABASE_URL log removed — credentials must not be printed to console
 
 const app = express();
 // Endpoint para obtener el nombre de la empresa por SubsidiaryID
@@ -205,6 +203,7 @@ app.post("/api/login", async (req, res) => {
       id: user.id,
       email: user.email,
       name: user.name,
+      position: user.position,
       role: user.role,
       isApproved: !!user.isApproved,
       accessIngenieria: !!user.accessIngenieria,
@@ -236,6 +235,7 @@ app.get("/api/users", authenticateToken, async (req, res) => {
         accessIngenieria: true,
         accessSubcontratos: true,
         accessContabilidad: true,
+        position: true,
       }
     });
 
@@ -250,7 +250,7 @@ app.get("/api/users", authenticateToken, async (req, res) => {
 // Update user permissions
 app.put("/api/users/:id/permissions", authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { accessIngenieria, accessSubcontratos, accessContabilidad, role, isApproved } = req.body;
+  const { accessIngenieria, accessSubcontratos, accessContabilidad, role, isApproved, position } = req.body;
 
   console.log(`Petición de cambio para usuario ${id}:`, { isApproved, role });
 
@@ -269,12 +269,14 @@ app.put("/api/users/:id/permissions", authenticateToken, async (req, res) => {
         accessSubcontratos: typeof accessSubcontratos === 'boolean' ? accessSubcontratos : previousUser.accessSubcontratos,
         accessContabilidad: typeof accessContabilidad === 'boolean' ? accessContabilidad : previousUser.accessContabilidad,
         role: role || previousUser.role,
-        isApproved: typeof isApproved === 'boolean' ? isApproved : previousUser.isApproved
+        isApproved: typeof isApproved === 'boolean' ? isApproved : previousUser.isApproved,
+        ...(position !== undefined ? { position: position || null } : {})
       },
       select: {
         id: true,
         email: true,
         name: true,
+        position: true,
         role: true,
         isApproved: true,
         accessIngenieria: true,
@@ -309,6 +311,7 @@ app.get("/api/me", authenticateToken, async (req: any, res) => {
       id: user.id,
       email: user.email,
       name: user.name,
+      position: user.position,
       role: user.role,
       isApproved: !!user.isApproved,
       accessIngenieria: !!user.accessIngenieria,
@@ -638,6 +641,62 @@ app.post("/api/admcloud/warehouse-access", authenticateToken, async (req, res) =
   }
 });
 
+// Endpoint empleados activos de AdmCloud (para firmas del boletín)
+app.get("/api/admcloud/employees", authenticateToken, async (req, res) => {
+  try {
+    const pool = await connectAdmCloud();
+    const result = await pool.request().query(`
+      SELECT FullName
+      FROM dbo.SA_Relationships
+      WHERE IsEmployee = 1 AND Inactive = 0
+      ORDER BY FullName ASC
+    `);
+    res.json(result.recordset);
+  } catch (error: any) {
+    console.error("Error al obtener empleados de AdmCloud:", error);
+    res.status(500).json({ message: "Error al obtener empleados", detail: error.message });
+  }
+});
+
+// ===== CONFIGURACIÓN GLOBAL DE FIRMAS =====
+
+// GET: Obtener todas las firmas configuradas
+app.get("/api/signature-config", authenticateToken, async (req, res) => {
+  try {
+    const configs = await prisma.signatureConfig.findMany({ orderBy: { sortOrder: 'asc' } });
+    res.json(configs);
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al obtener configuración de firmas", detail: error.message });
+  }
+});
+
+// PUT: Reemplazar toda la configuración de firmas
+app.put("/api/signature-config", authenticateToken, async (req, res) => {
+  const { signatures } = req.body as { signatures: { name: string; alias?: string; role: string }[] };
+  if (!Array.isArray(signatures)) return res.status(400).json({ message: "Formato inválido" });
+  try {
+    await prisma.signatureConfig.deleteMany({});
+    if (signatures.length > 0) {
+      await prisma.signatureConfig.createMany({
+        data: signatures
+          .filter(s => s.name?.trim())
+          .map((s, i) => ({
+            name: s.name.trim(),
+            alias: s.alias?.trim() || null,
+            role: s.role?.trim() || '',
+            sortOrder: i
+          }))
+      });
+    }
+    const updated = await prisma.signatureConfig.findMany({ orderBy: { sortOrder: 'asc' } });
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ message: "Error al guardar configuración de firmas", detail: error.message });
+  }
+});
+
+// ==========================================
+
 // Get single Transaction by ID
 app.get("/api/admcloud/transactions/:id", authenticateToken, async (req, res) => {
   try {
@@ -910,7 +969,8 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
   const {
     externalTxID, docID, vendorName, vendorFiscalID, projectName,
     lines, retentionPercent, advancePercent, isrPercent,
-    receptionNumbers, measurementStartDate, measurementEndDate
+    receptionNumbers, measurementStartDate, measurementEndDate,
+    signatures
   } = req.body;
 
   try {
@@ -922,17 +982,16 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
     const nextId = (lastPR?.id || 0) + 1;
     const docNumber = `BM-${nextId.toString().padStart(6, '0')}`;
 
-    // Calcular el número de cubicación correlativo para esta OC y Proveedor usando _max
+    // Calcular el número de cubicación correlativo para esta OC.
+    // Se agrupa solo por OC (externalTxID) ya que una OC corresponde siempre
+    // al mismo contratista, aunque el nombre del vendor pueda variar levemente.
+    // Los boletines RECHAZADOS conservan su número en la secuencia.
     const aggregate = await prisma.paymentRequest.aggregate({
       _max: {
         cubicacionNo: true
       },
       where: {
-        externalTxID,
-        vendorName: {
-          equals: normalizeVendorName(vendorName),
-          mode: 'insensitive'
-        }
+        externalTxID
       }
     });
 
@@ -1001,6 +1060,7 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
         docID,
         vendorName: normalizeVendorName(vendorName),
         vendorFiscalID,
+        signatures: signatures ? JSON.stringify(signatures) : null,
         projectName,
         receptionNumbers,
         measurementStartDate: measurementStartDate ? new Date(measurementStartDate) : null,
@@ -1057,7 +1117,8 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
   const {
     lines, retentionPercent, advancePercent, isrPercent,
-    receptionNumbers, vendorFiscalID, measurementStartDate, measurementEndDate, vendorName
+    receptionNumbers, vendorFiscalID, measurementStartDate, measurementEndDate, vendorName,
+    signatures
   } = req.body;
 
   try {
@@ -1098,23 +1159,18 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
     if (!cubicacionNo || cubicacionNo === 0) {
       console.log(`🔧 Asignando número de cubicación automático para boletín antiguo: ${existingPR.docNumber}`);
 
-      const normalizedVName = normalizeVendorName(vendorName || existingPR.vendorName);
+      // Agrupar solo por OC — el nombre del vendor puede variar pero la OC es del mismo contratista
       const aggregate = await prisma.paymentRequest.aggregate({
         _max: { cubicacionNo: true },
         where: {
           externalTxID: existingPR.externalTxID,
-          vendorName: {
-            equals: normalizedVName,
-            mode: 'insensitive'
-          }
+          id: { not: prId }  // Excluir el mismo boletín para no contar su propio valor corrupto
         }
       });
 
       cubicacionNo = (aggregate._max.cubicacionNo || 0) + 1;
 
-      // Log detallado a consola y opcionalmente a archivo si fuera necesario
       console.log(`📊 DB Stats for ${existingPR.docID}: Max existing=${aggregate._max.cubicacionNo}, New=${cubicacionNo}`);
-      console.log(`   Criteria: TxID=${existingPR.externalTxID}, Vendor=${normalizedVName} or ${existingPR.vendorName}`);
     }
 
     const previousUnitsByItem = await getLastUnitsByItemForTx(existingPR.externalTxID, prId);
@@ -1198,6 +1254,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
           vendorFiscalID,
           measurementStartDate: measurementStartDate ? new Date(measurementStartDate) : null,
           measurementEndDate: measurementEndDate ? new Date(measurementEndDate) : null,
+          signatures: signatures !== undefined ? (signatures ? JSON.stringify(signatures) : null) : existingPR.signatures,
           lines: { create: formattedLines }
         },
         include: { lines: true }

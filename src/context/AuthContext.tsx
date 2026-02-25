@@ -4,6 +4,7 @@ interface User {
   id: number;
   email: string;
   name: string | null;
+  position?: string | null;  // Cargo / Título del usuario
   role: string;
   isApproved: boolean;
   accessIngenieria: boolean;
@@ -33,12 +34,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           console.log('🔄 Sincronizando estado del usuario con el servidor (v1.5)...');
           const response = await fetch('http://localhost:5000/api/me', {
-            headers: { 
+            headers: {
               'Authorization': `Bearer ${token}`,
               'Cache-Control': 'no-cache'
             }
           });
-          
+
           if (response.ok) {
             const latestUser = await response.json();
             console.log('✅ Estado sincronizado:', latestUser);
