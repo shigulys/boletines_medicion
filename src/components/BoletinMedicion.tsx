@@ -773,7 +773,7 @@ export const BoletinMedicion: React.FC = () => {
 
     const net = netBeforeAmortization - amortizationAmount;
 
-    return { subTotal, totalTax, retAmount, advAmount, isrAmount, amortizationAmount, amortizations, totalRetentionByLine, totalItbisRetention, net };
+    return { subTotal, totalTax, retAmount, advAmount, isrAmount, amortizationAmount, amortizations, totalRetentionByLine, totalItbisRetention, net, netBeforeAmortization };
   };
 
   const getRetentionsSummary = () => {
@@ -2643,7 +2643,13 @@ export const BoletinMedicion: React.FC = () => {
                                 checked={isSelected}
                                 onChange={(e) => {
                                   if (e.target.checked) {
-                                    setSelectedPrepayments([...selectedPrepayments, { ...pref, percentage: 100 }]);
+                                    const maxAllowedAmt = Math.max(0, totals.netBeforeAmortization - totals.amortizationAmount);
+                                    if (maxAllowedAmt <= 0) {
+                                      alert("El neto de la factura ya está cubierto. No puede agregar más amortizaciones.");
+                                      return;
+                                    }
+                                    const maxPercentage = Math.min(100, (maxAllowedAmt / pref.AvailableBalance) * 100);
+                                    setSelectedPrepayments([...selectedPrepayments, { ...pref, percentage: maxPercentage }]);
                                   } else {
                                     setSelectedPrepayments(selectedPrepayments.filter(sp => (sp.DocID || sp.docID) !== pref.DocID));
                                   }
@@ -2660,7 +2666,20 @@ export const BoletinMedicion: React.FC = () => {
                                   min="0" max="100"
                                   value={selectedPref.percentage !== undefined ? selectedPref.percentage : 100}
                                   onChange={(e) => {
-                                    const val = Math.max(0, Math.min(100, Number(e.target.value)));
+                                    let val = Number(e.target.value);
+                                    if (isNaN(val)) val = 0;
+
+                                    const otherAmortizations = totals.amortizations?.filter((a: any) => a.DocID !== pref.DocID).reduce((sum: number, a: any) => sum + a.Amount, 0) || 0;
+                                    const maxAllowedAmt = Math.max(0, totals.netBeforeAmortization - otherAmortizations);
+                                    const requestedAmt = pref.AvailableBalance * (val / 100);
+
+                                    if (requestedAmt > maxAllowedAmt) {
+                                      alert(`No puede amortizar más del neto disponible de la factura ($${formatCurrency(maxAllowedAmt)}).`);
+                                      val = (maxAllowedAmt / pref.AvailableBalance) * 100;
+                                    }
+
+                                    val = Math.max(0, Math.min(100, val));
+
                                     setSelectedPrepayments(selectedPrepayments.map(sp =>
                                       (sp.DocID || sp.docID) === pref.DocID ? { ...sp, percentage: val } : sp
                                     ));
