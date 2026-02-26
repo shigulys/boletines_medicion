@@ -1,0 +1,85 @@
+Connected to DB
+
+--- TABLE: User ---
+id: integer
+updatedAt: timestamp without time zone
+accessContabilidad: boolean
+accessIngenieria: boolean
+accessSubcontratos: boolean
+isApproved: boolean
+createdAt: timestamp without time zone
+email: text
+password: text
+name: text
+position: text
+role: text
+
+--- TABLE: SignatureConfig ---
+id: integer
+sortOrder: integer
+name: text
+role: text
+alias: text
+
+--- TABLE: PaymentRequest ---
+id: integer
+retentionAmount: numeric
+advancePercent: numeric
+advanceAmount: numeric
+netTotal: numeric
+createdAt: timestamp without time zone
+isrAmount: numeric
+isrPercent: numeric
+measurementStartDate: timestamp without time zone
+measurementEndDate: timestamp without time zone
+cubicacionNo: integer
+date: timestamp without time zone
+subTotal: numeric
+taxAmount: numeric
+retentionPercent: numeric
+docNumber: text
+externalTxID: text
+docID: text
+vendorName: text
+projectName: text
+vendorFiscalID: text
+signatures: text
+receptionNumbers: text
+status: text
+rejectionReason: text
+
+--- TABLE: PaymentRequestLine ---
+id: integer
+paymentRequestId: integer
+taxAmount: numeric
+totalLine: numeric
+retentionPercent: numeric
+retentionAmount: numeric
+itbisRetentionPercent: numeric
+quantity: numeric
+unitPrice: numeric
+taxPercent: numeric
+externalItemID: text
+description: text
+unitOfMeasure: text
+receptionNumbers: text
+taxType: text
+
+--- TABLE: Retention ---
+id: integer
+isActive: boolean
+createdAt: timestamp without time zone
+updatedAt: timestamp without time zone
+percentage: numeric
+code: character varying
+name: character varying
+description: text
+
+--- TABLE: UnitOfMeasure ---
+isActive: boolean
+createdAt: timestamp without time zone
+updatedAt: timestamp without time zone
+id: integer
+description: text
+code: text
+name: text

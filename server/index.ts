@@ -562,6 +562,9 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
             t.[DepartmentID],
             t.[CurrencyID] as Currency,
             t.[ExchangeRate],
+            t.[RelationshipID],
+            t.[ProjectID],
+            t.[LocationID],
             t.[CUSTOM_Fechadesde] as MeasurementStartDate,
             t.[CUSTOM_Fechahasta] as MeasurementEndDate,
             r.[FullName] as VendorName,
@@ -602,6 +605,60 @@ app.get("/api/admcloud/transactions", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Error fetching AdmCloud transactions:", error);
     res.status(500).json({ message: "Error al consultar AdmCloud" });
+  }
+});
+
+app.get("/api/admcloud/prepayments/:relationshipId/:locationId", authenticateToken, async (req, res) => {
+  const { relationshipId, locationId } = req.params;
+  try {
+    const pool = await connectAdmCloud();
+    const query = `
+      SELECT 
+        DocID,
+        DocDate,
+        DocType,
+        RelationshipID,
+        DepartmentID, 
+        LocationID,
+        TotalAmount, 
+        AppliedPayments,
+        (TotalAmount - AppliedPayments) as AvailableBalance
+      FROM SA_Transactions 
+      WHERE DocType = 'VEND_PRE' 
+        AND RelationshipID = @relationshipId
+        AND LocationID = @locationId
+        AND (TotalAmount - AppliedPayments) > 0.01
+      ORDER BY DocDate ASC
+    `;
+
+    const result = await pool.request()
+      .input("relationshipId", relationshipId)
+      .input("locationId", locationId)
+      .query(query);
+
+    // DEBUG: Log all transactions for this vendor/location to see what types exist
+    const debugQuery = `
+      SELECT DocID, DocType, TotalAmount, AppliedPayments
+      FROM SA_Transactions 
+      WHERE RelationshipID = @relationshipId
+        AND LocationID = @locationId
+    `;
+    const debugResult = await pool.request()
+      .input("relationshipId", relationshipId)
+      .input("locationId", locationId)
+      .query(debugQuery);
+
+    console.log(`\n🔍 DEBUG PREPAYMENTS [${relationshipId} / ${locationId}]:`);
+    console.log(`Found ${debugResult.recordset.length} total transactions for this vendor/location:`);
+    debugResult.recordset.forEach((r: any) => {
+      console.log(`- ${r.DocID} [${r.DocType}]: Total=${r.TotalAmount}, Applied=${r.AppliedPayments}, Balance=${r.TotalAmount - r.AppliedPayments}`);
+    });
+    console.log('---------------------------------\n');
+
+    res.json(result.recordset);
+  } catch (error: any) {
+    console.error("Error fetching available prepayments:", error);
+    res.status(500).json({ message: "Error al consultar adelantos", detail: error.message });
   }
 });
 
@@ -714,6 +771,8 @@ app.get("/api/admcloud/transactions/:id", authenticateToken, async (req, res) =>
             t.[TaxAmount],
             t.[TotalAmount],
             t.[DepartmentID],
+            t.[RelationshipID],
+            t.[LocationID],
             t.[CUSTOM_Fechadesde] as MeasurementStartDate,
             t.[CUSTOM_Fechahasta] as MeasurementEndDate,
             r.[FullName] as VendorName,
@@ -970,7 +1029,7 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
     externalTxID, docID, vendorName, vendorFiscalID, projectName,
     lines, retentionPercent, advancePercent, isrPercent,
     receptionNumbers, measurementStartDate, measurementEndDate,
-    signatures
+    signatures, amortizationAmount, amortizedPrepayments
   } = req.body;
 
   try {
@@ -1073,6 +1132,8 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
         advanceAmount,
         isrPercent,
         isrAmount,
+        amortizationAmount: amortizationAmount || 0,
+        amortizedPrepayments: amortizedPrepayments || null,
         netTotal,
         lines: { create: formattedLines }
       },
@@ -1086,6 +1147,7 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
 
 app.get("/api/payment-requests", authenticateToken, async (req, res) => {
   try {
+    console.log("📥 [GET /api/payment-requests] Request received");
     const prs = await prisma.paymentRequest.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
@@ -1118,7 +1180,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
   const {
     lines, retentionPercent, advancePercent, isrPercent,
     receptionNumbers, vendorFiscalID, measurementStartDate, measurementEndDate, vendorName,
-    signatures
+    signatures, amortizationAmount, amortizedPrepayments
   } = req.body;
 
   try {
@@ -1226,7 +1288,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
     const retentionAmount = subTotal * (retentionPercent / 100);
     const advanceAmount = subTotal * (advancePercent / 100);
     const isrAmount = subTotal * (isrPercent / 100);
-    const netTotal = (subTotal + taxAmount) - totalRetentionByLine - totalItbisRetention - retentionAmount - advanceAmount - isrAmount;
+    const netTotal = (subTotal + taxAmount) - totalRetentionByLine - totalItbisRetention - retentionAmount - advanceAmount - isrAmount - (amortizationAmount || 0);
 
     // Actualizar usando una transacción para borrar lineas viejas y crear nuevas
     const updatedPR = await prisma.$transaction(async (tx) => {
@@ -1247,6 +1309,8 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
           advanceAmount,
           isrPercent,
           isrAmount,
+          amortizationAmount: amortizationAmount || 0,
+          amortizedPrepayments: amortizedPrepayments || null,
           netTotal,
           receptionNumbers,
           cubicacionNo,
@@ -2202,7 +2266,8 @@ app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
 
-// Reparación automática de números de cubicación faltantes al iniciar
+// Reparación automática de números de cubicación faltantes al iniciar (TEMPORARILY DISABLED)
+/*
 (async () => {
   try {
     const missingPRs = await prisma.paymentRequest.findMany({
@@ -2243,3 +2308,4 @@ app.listen(PORT, () => {
     console.error('❌ Error durante la reparación automática:', err);
   }
 })();
+*/

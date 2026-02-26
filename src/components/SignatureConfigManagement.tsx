@@ -10,8 +10,8 @@ interface Signature {
 export const SignatureConfigManagement: React.FC = () => {
     const [employees, setEmployees] = useState<{ FullName: string }[]>([]);
     const [signatures, setSignatures] = useState<Signature[]>([
-        { name: '', alias: '', role: '' },
-        { name: '', alias: '', role: '' },
+        { name: '', alias: '', role: 'Revisado Por' },
+        { name: '', alias: '', role: 'Autorizado Por' },
     ]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -52,7 +52,7 @@ export const SignatureConfigManagement: React.FC = () => {
                 setSignatures(
                     updated.length > 0
                         ? updated.map((s: any) => ({ ...s, alias: s.alias || '' }))
-                        : [{ name: '', alias: '', role: '' }, { name: '', alias: '', role: '' }]
+                        : [{ name: '', alias: '', role: 'Revisado Por' }, { name: '', alias: '', role: 'Autorizado Por' }]
                 );
                 setMessage({ type: 'success', text: `✅ Configuración guardada — ${updated.length} firma(s) activa(s)` });
             } else {
@@ -81,8 +81,13 @@ export const SignatureConfigManagement: React.FC = () => {
                     {/* Info */}
                     <div style={{ backgroundColor: '#e3f2fd', border: '1px solid #90caf9', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
                         <p style={{ margin: 0, color: '#1565c0', fontSize: '0.95rem' }}>
-                            <strong>📌 Nota:</strong> Las firmas se incluyen automáticamente en todos los PDFs. La <strong>Abreviatura</strong> es opcional — si se define, se muestra en el PDF en lugar del nombre completo, aunque el empleado sigue siendo el seleccionado de AdmCloud.
+                            <strong>📌 Configuración de Firmas:</strong> Estas firmas se incluirán después de "Elaborado Por" en el PDF. Se recomienda el siguiente orden:
                         </p>
+                        <ul style={{ margin: '8px 0 0 0', color: '#1565c0', fontSize: '0.9rem', paddingLeft: '24px' }}>
+                            <li>1. <strong>Elaborado Por:</strong> (Usuario que genera el boletín - automático)</li>
+                            <li>2. <strong>Revisado Por:</strong> (Configurar abajo)</li>
+                            <li>3. <strong>Autorizado Por:</strong> (Configurar abajo)</li>
+                        </ul>
                     </div>
 
                     {/* Table */}

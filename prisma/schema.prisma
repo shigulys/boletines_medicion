@@ -108,6 +108,8 @@ model PaymentRequest {
   advanceAmount     Decimal              @default(0) @db.Decimal(18, 6)
   isrPercent        Decimal              @default(0) @db.Decimal(18, 6) // Retención ISR
   isrAmount         Decimal              @default(0) @db.Decimal(18, 6)
+  amortizationAmount Decimal              @default(0) @db.Decimal(18, 6) // Amortizaciones manuales de adelantos
+  amortizedPrepayments String?            // JSON: Array de adelantos aplicados [{DocID, Amount}]
   netTotal          Decimal              @db.Decimal(18, 6) // subTotal + tax - retenciones
   status            String               @default("PENDIENTE") 
   rejectionReason   String?              // Motivo del rechazo (si aplica)

@@ -20,6 +20,9 @@ interface Transaction {
   TaxAmount?: number;
   Currency?: string;
   ExchangeRate?: number;
+  RelationshipID?: string;
+  ProjectID?: string;
+  LocationID?: string;
 }
 
 interface TransactionItem {
@@ -112,9 +115,11 @@ export const BoletinMedicion: React.FC = () => {
     isActive: boolean;
   }>>([]);
   const [availableUnits, setAvailableUnits] = useState<UnitOfMeasureData[]>([]);
+  const [availablePrepayments, setAvailablePrepayments] = useState<any[]>([]);
+  const [selectedPrepayments, setSelectedPrepayments] = useState<any[]>([]);
 
   // Firmas globales (cargadas desde la configuración del sistema)
-  const [globalSignatures, setGlobalSignatures] = useState<{ name: string; role: string }[]>([]);
+  const [globalSignatures, setGlobalSignatures] = useState<{ name: string; alias?: string; role: string }[]>([]);
 
   const getLastUnitsByItem = (externalTxID: string, excludeBoletinId?: number | null) => {
     const unitsByItem = new Map<string, string>();
@@ -246,6 +251,31 @@ export const BoletinMedicion: React.FC = () => {
     }
   };
 
+  const extractCargo = (roleStr: string, defaultLabel: string) => {
+    if (!roleStr) return '';
+    // Eliminar prefijos comunes y etiquetas para obtener solo el cargo real
+    let clean = roleStr.replace(/^[0-9]\.\s*/, ''); // Quita "1. ", "2. ", etc.
+    if (defaultLabel) {
+      clean = clean.replace(new RegExp(`^${defaultLabel}\\s*/?\\s*`, 'i'), ''); // Quita "Elaborado Por /", etc.
+    }
+    clean = clean.replace(/^(Elaborado Por|Revisado Por|Autorizado Por)\s*/i, '');
+    clean = clean.replace(/^\s*\/\s*/, ''); // Quita "/" inicial si quedó
+    return clean.trim();
+  };
+
+  const getGlobalDetails = (name: string, globalSignatures: any[]) => {
+    const search = name?.trim().toLowerCase();
+    if (!search) return { alias: '', cargo: '' };
+    const match = globalSignatures.find(gs =>
+      gs.name?.trim().toLowerCase() === search ||
+      gs.alias?.trim().toLowerCase() === search
+    );
+    return match ? {
+      alias: match.alias?.trim() || '',
+      cargo: extractCargo(match.role, '')
+    } : { alias: '', cargo: '' };
+  };
+
   const handleGeneratePDF = async (boletin: any) => {
     let boletinWithDates = { ...boletin };
 
@@ -271,11 +301,58 @@ export const BoletinMedicion: React.FC = () => {
       }
     }
 
-    // Adjuntar firmas: usuario actual (Elaborado por) + firmas globales configuradas
-    boletinWithDates.signatures = [
-      { name: user?.name || user?.email || 'Usuario', role: user?.position || 'Elaborado por' },
-      ...globalSignatures.map((s: any) => ({ name: s.alias?.trim() || s.name, role: s.role }))
-    ];
+    // Adjuntar firmas de forma robusta
+    let savedSignatures: any[] = [];
+    if (boletin.signatures) {
+      try {
+        savedSignatures = typeof boletin.signatures === 'string'
+          ? JSON.parse(boletin.signatures)
+          : boletin.signatures;
+      } catch (e) {
+        console.error("Error parsing saved signatures:", e);
+      }
+    }
+
+    const finalSignatures = [];
+
+    // 1. Elaborado Por (Siempre el usuario logueado)
+    const savedElaborado = (Array.isArray(savedSignatures) && savedSignatures.length > 0) ? savedSignatures[0] : null;
+    const currentName = user?.name || savedElaborado?.name || user?.email || 'Usuario';
+    const globalDetailsElab = getGlobalDetails(currentName, globalSignatures);
+
+    let userPos = user?.position || globalDetailsElab.cargo || extractCargo(savedElaborado?.role, 'Elaborado Por');
+
+    finalSignatures.push({
+      name: globalDetailsElab.alias || currentName,
+      role: `1. Elaborado Por${userPos ? ` / ${userPos}` : ''}`
+    });
+
+    // 2. Revisado Por y 3. Autorizado Por
+    const rolesLabels = ['Revisado Por', 'Autorizado Por'];
+    for (let i = 0; i < 2; i++) {
+      const idx = i + 2; // Número de posición (2 y 3)
+      const label = rolesLabels[i];
+
+      const saved = (Array.isArray(savedSignatures) && savedSignatures.length > (i + 1)) ? savedSignatures[i + 1] : null;
+      const global = (Array.isArray(globalSignatures) && globalSignatures.length > i) ? globalSignatures[i] : null;
+
+      const source = saved || global;
+      if (source) {
+        const sourceName = (source.name || source.alias || '').trim();
+        const globalDetails = getGlobalDetails(sourceName, globalSignatures);
+
+        // Priorizar datos globales para alias y cargo
+        const displayName = globalDetails.alias || source.alias?.trim() || source.name;
+        const cargo = globalDetails.cargo || extractCargo(source.role, label);
+
+        finalSignatures.push({
+          name: displayName,
+          role: `${idx}. ${label}${cargo ? ` / ${cargo}` : ''}`
+        });
+      }
+    }
+
+    boletinWithDates.signatures = finalSignatures;
 
     generatePDF(boletinWithDates);
   };
@@ -403,11 +480,30 @@ export const BoletinMedicion: React.FC = () => {
     }
   };
 
+  const fetchPrepayments = async (relationshipId: string, locationId: string) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/admcloud/prepayments/${relationshipId}/${locationId}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAvailablePrepayments(data);
+      }
+    } catch (error) {
+      console.error('Error fetching prepayments:', error);
+    }
+  };
+
   const handleSelectOC = async (tx: Transaction) => {
     setSelectedTx(tx);
     setItemsLoading(true);
     setLinesToPay([]); // Reset boolean/quantities
     setHasUnsavedChanges(false); // Nueva generación, sin cambios aún
+
+    // Cargar adelantos disponibles
+    if (tx.RelationshipID && tx.LocationID) {
+      fetchPrepayments(tx.RelationshipID, tx.LocationID);
+    }
     try {
       // Consultar recepciones para obtener fechas de medición
       const receptionsResponse = await fetch(`http://localhost:5000/api/admcloud/transactions/${tx.ID}/receptions`, {
@@ -484,6 +580,16 @@ export const BoletinMedicion: React.FC = () => {
     setMeasurementEndDate(boletin.measurementEndDate || null);
     setHasUnsavedChanges(false); // Cargando datos guardados
 
+    if (boletin.amortizedPrepayments) {
+      try {
+        setSelectedPrepayments(JSON.parse(boletin.amortizedPrepayments));
+      } catch {
+        setSelectedPrepayments([]);
+      }
+    } else {
+      setSelectedPrepayments([]);
+    }
+
     // Buscar la transacción original en el listado
     const tx = transactions.find(t => t.ID === boletin.externalTxID);
     if (tx) {
@@ -533,6 +639,11 @@ export const BoletinMedicion: React.FC = () => {
         if (fullTx.VendorFiscalID) {
           // Actualizar selectedTx con el FiscalID de AdmCloud
           setSelectedTx((prev: any) => ({ ...prev, VendorFiscalID: fullTx.VendorFiscalID }));
+        }
+
+        // Cargar adelantos disponibles usando LocationID y RelationshipID de la orden
+        if (fullTx.RelationshipID && fullTx.LocationID) {
+          await fetchPrepayments(fullTx.RelationshipID, fullTx.LocationID);
         }
       }
 
@@ -636,9 +747,10 @@ export const BoletinMedicion: React.FC = () => {
     const retAmount = subTotal * (retentionPercent / 100);
     const advAmount = subTotal * (advancePercent / 100);
     const isrAmount = subTotal * (isrPercent / 100);
-    const net = (subTotal + totalTax) - totalRetentionByLine - totalItbisRetention - retAmount - advAmount - isrAmount;
+    const amortizationAmount = selectedPrepayments.reduce((sum, p) => sum + p.AvailableBalance, 0);
+    const net = (subTotal + totalTax) - totalRetentionByLine - totalItbisRetention - retAmount - advAmount - isrAmount - amortizationAmount;
 
-    return { subTotal, totalTax, retAmount, advAmount, isrAmount, totalRetentionByLine, totalItbisRetention, net };
+    return { subTotal, totalTax, retAmount, advAmount, isrAmount, amortizationAmount, totalRetentionByLine, totalItbisRetention, net };
   };
 
   const getRetentionsSummary = () => {
@@ -1433,10 +1545,38 @@ export const BoletinMedicion: React.FC = () => {
       currentY += 6;
     }
 
+    if (boletin.amortizationAmount > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.text(`Amortización de Adelantos:`, labelX, currentY);
+      doc.setFont("helvetica", "normal");
+      currentY += 6;
+
+      if (boletin.amortizedPrepayments) {
+        try {
+          const amortized = JSON.parse(boletin.amortizedPrepayments);
+          amortized.forEach((p: any) => {
+            doc.text(`  - ${p.DocID}:`, labelX, currentY);
+            doc.text(`-$${formatCurrency(p.AvailableBalance)}`, valueX, currentY, { align: 'right' });
+            currentY += 5;
+          });
+          currentY += 1;
+        } catch (e) {
+          doc.text(`  - Total amortizado:`, labelX, currentY);
+          doc.text(`-$${formatCurrency(boletin.amortizationAmount)}`, valueX, currentY, { align: 'right' });
+          currentY += 6;
+        }
+      } else {
+        doc.text(`  - Total amortizado:`, labelX, currentY);
+        doc.text(`-$${formatCurrency(boletin.amortizationAmount)}`, valueX, currentY, { align: 'right' });
+        currentY += 6;
+      }
+    }
+
     // Total Deducciones
     const totalDeducciones = (boletin.retentionAmount || 0) +
       (boletin.advanceAmount || 0) +
       (boletin.isrAmount || 0) +
+      (boletin.amortizationAmount || 0) +
       Object.values(retentionsByType).reduce((sum, ret) => sum + ret.amount, 0) +
       Object.values(itbisRetentionsByPercent).reduce((sum, amt) => sum + amt, 0);
 
@@ -1496,7 +1636,7 @@ export const BoletinMedicion: React.FC = () => {
       const margin = 14;
       const colWidth = (pageWidth - margin * 2) / cols;
       const lineLen = colWidth * 0.75;
-      const rowHeight = 22;
+      const rowHeight = 28;
 
       for (let i = 0; i < signatories.length; i++) {
         const col = i % cols;
@@ -1521,7 +1661,9 @@ export const BoletinMedicion: React.FC = () => {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
         doc.setTextColor(100);
-        doc.text(signatories[i].role || '', x, y + 20);
+        // Ajustar texto si es muy largo
+        const roleLines = doc.splitTextToSize(signatories[i].role || '', colWidth - 5);
+        doc.text(roleLines, x, y + 20);
         doc.setTextColor(0);
       }
     }
@@ -2442,7 +2584,53 @@ export const BoletinMedicion: React.FC = () => {
             )}
           </div>
 
-          <div className="totals-section card" style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
+          <div className="totals-section card" style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+            {/* Sección de Adelantos Disponibles */}
+            {availablePrepayments.length > 0 && (
+              <div style={{ width: '100%', maxWidth: '600px', padding: '15px', backgroundColor: '#e8f5e9', borderRadius: '8px', border: '1px solid #c8e6c9' }}>
+                <h4 style={{ margin: '0 0 10px 0', color: '#2e7d32', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>💸</span> Adelantos Disponibles para Amortizar
+                </h4>
+                <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
+                  <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ textAlign: 'left', borderBottom: '1px solid #c8e6c9' }}>
+                        <th style={{ padding: '5px' }}>Sel.</th>
+                        <th style={{ padding: '5px' }}>Documento</th>
+                        <th style={{ padding: '5px' }}>Fecha</th>
+                        <th style={{ padding: '5px', textAlign: 'right' }}>Disponible</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {availablePrepayments.map(pref => {
+                        const isSelected = selectedPrepayments.some(sp => sp.DocID === pref.DocID);
+                        return (
+                          <tr key={pref.DocID} style={{ borderBottom: '1px solid #f1f8e9' }}>
+                            <td style={{ padding: '5px' }}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedPrepayments([...selectedPrepayments, pref]);
+                                  } else {
+                                    setSelectedPrepayments(selectedPrepayments.filter(sp => sp.DocID !== pref.DocID));
+                                  }
+                                }}
+                              />
+                            </td>
+                            <td style={{ padding: '5px' }}>{pref.DocID}</td>
+                            <td style={{ padding: '5px' }}>{new Date(pref.DocDate).toLocaleDateString('es-ES')}</td>
+                            <td style={{ padding: '5px', textAlign: 'right', fontWeight: 'bold' }}>${formatCurrency(pref.AvailableBalance)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             <div className="summary-panel" style={{ padding: '20px', backgroundColor: '#fafafa', borderRadius: '8px', border: '1px solid #e0e0e0', width: '100%', maxWidth: '600px' }}>
               <h4 style={{ marginBottom: '20px', borderBottom: '2px solid #1976d2', paddingBottom: '10px' }}>💰 Resumen Económico</h4>
 
@@ -2494,9 +2682,20 @@ export const BoletinMedicion: React.FC = () => {
                       <span style={{ color: '#d32f2f', fontWeight: '600' }}>-${formatCurrency(totals.isrAmount)}</span>
                     </div>
                   )}
+                  {totals.amortizationAmount > 0 && (
+                    <div style={{ padding: '10px', marginTop: '10px', backgroundColor: '#fff', borderRadius: '4px', border: '1px dashed #c8e6c9' }}>
+                      <div style={{ fontSize: '0.8rem', color: '#2e7d32', fontWeight: 'bold', marginBottom: '5px' }}>Amortización de Adelantos:</div>
+                      {selectedPrepayments.map(sp => (
+                        <div key={sp.DocID} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.8rem', color: '#444' }}>
+                          <span>{sp.DocID}</span>
+                          <span>-${formatCurrency(sp.AvailableBalance)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #ffb74d' }}>
                     <strong style={{ fontSize: '0.9rem' }}>Total Deducciones:</strong>
-                    <strong style={{ color: '#d32f2f', fontSize: '0.9rem' }}>-${formatCurrency(totals.totalRetentionByLine + totals.totalItbisRetention + totals.retAmount + totals.advAmount + totals.isrAmount)}</strong>
+                    <strong style={{ color: '#d32f2f', fontSize: '0.9rem' }}>-${formatCurrency(totals.totalRetentionByLine + totals.totalItbisRetention + totals.retAmount + totals.advAmount + totals.isrAmount + totals.amortizationAmount)}</strong>
                   </div>
                 </div>
               )}
@@ -2548,11 +2747,36 @@ export const BoletinMedicion: React.FC = () => {
                     advanceAmount: totalsCalc.advAmount,
                     isrAmount: totalsCalc.isrAmount,
                     netTotal: totalsCalc.net,
-                    // Usuario actual (Elaborado por) + firmas globales
-                    signatures: [
-                      { name: user?.name || user?.email || 'Usuario', role: user?.position || 'Elaborado por' },
-                      ...globalSignatures.map((s: any) => ({ name: s.alias?.trim() || s.name, role: s.role }))
-                    ]
+                    // Usuario actual (Elaborado Por) + firmas globales
+                    signatures: (() => {
+                      const sigs = [];
+                      const currentName = user?.name || user?.email || 'Usuario';
+                      const globalDetailsElab = getGlobalDetails(currentName, globalSignatures);
+                      const userPos = user?.position || globalDetailsElab.cargo;
+
+                      // 1. Elaborado Por
+                      sigs.push({
+                        name: globalDetailsElab.alias || currentName,
+                        role: `1. Elaborado Por${userPos ? ` / ${userPos}` : ''}`
+                      });
+
+                      // 2. Revisado Por y 3. Autorizado Por
+                      const labels = ['Revisado Por', 'Autorizado Por'];
+                      globalSignatures.slice(0, 2).forEach((s: any, idx) => {
+                        const label = labels[idx];
+                        const globalDetails = getGlobalDetails(s.name || s.alias, globalSignatures);
+
+                        const displayName = globalDetails.alias || s.alias?.trim() || s.name;
+                        const cargo = globalDetails.cargo || extractCargo(s.role, label);
+
+                        sigs.push({
+                          name: displayName,
+                          role: `${idx + 2}. ${label}${cargo ? ` / ${cargo}` : ''}`
+                        });
+                      });
+
+                      return sigs;
+                    })()
                   };
 
                   console.log('📄 Generando PDF con objeto completo:', tempBoletin);

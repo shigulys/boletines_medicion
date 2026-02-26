@@ -1,0 +1,20 @@
+{
+  "prepayment": [
+    {
+      "DocID": "ICI-SLA-00000129",
+      "DocType": "VEND_PRE",
+      "RelationshipID": "8C3EC053-B1E9-4230-6415-08DE0A5CAD93",
+      "LocationID": "1F8A45C8-F8CA-49B8-8C51-08DE1111A415",
+      "TotalAmount": 74812.59,
+      "AppliedPayments": 0
+    }
+  ],
+  "oc": [
+    {
+      "ID": "6A9F45B0-841A-42E2-022A-08DE324CA481",
+      "DocID": "ICI-ORC00000036",
+      "RelationshipID": "8C3EC053-B1E9-4230-6415-08DE0A5CAD93",
+      "LocationID": "1F8A45C8-F8CA-49B8-8C51-08DE1111A415"
+    }
+  ]
+}

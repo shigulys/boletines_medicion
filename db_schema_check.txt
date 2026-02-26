@@ -1,0 +1,7 @@
+Connected to DB
+Columns in SignatureConfig:
+id: integer
+sortOrder: integer
+name: text
+role: text
+alias: text
