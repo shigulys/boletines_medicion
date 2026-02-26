@@ -266,3 +266,8 @@
 [GET] 2026-02-26T21:32:17.331Z Found 5 bulletins. First item cubicacionNo: 5
 [GET] 2026-02-26T21:32:17.827Z Found 5 bulletins. First item cubicacionNo: 5
 [GET] 2026-02-26T21:32:18.318Z Found 5 bulletins. First item cubicacionNo: 5
+[GET] 2026-02-26T21:34:58.959Z Found 5 bulletins. First item cubicacionNo: 5
+[GET] 2026-02-26T21:34:59.618Z Found 5 bulletins. First item cubicacionNo: 5
+[GET] 2026-02-26T21:35:00.269Z Found 5 bulletins. First item cubicacionNo: 5
+[PUT] 2026-02-26T21:35:13.816Z ID: 5 (BM-000005) assigned cubicacionNo: 5
+[GET] 2026-02-26T21:35:16.850Z Found 5 bulletins. First item cubicacionNo: 5

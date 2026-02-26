@@ -850,8 +850,10 @@ export const BoletinMedicion: React.FC = () => {
     }));
 
     const totals = calculateTotals();
-    if (totals.net <= 0) {
-      alert("Error: El monto Neto a Pagar debe ser mayor a cero para poder guardar el boletín.");
+    // Permitir monto neto en cero exacto si es el resultado de una amortización que cubre la factura.
+    // Solo rechazar si es menor que 0.
+    if (totals.net < 0) {
+      alert("Error: El monto Neto a Pagar no puede ser menor a cero. Revise las amortizaciones o retenciones.");
       return;
     }
 
