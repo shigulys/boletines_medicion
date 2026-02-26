@@ -747,10 +747,33 @@ export const BoletinMedicion: React.FC = () => {
     const retAmount = subTotal * (retentionPercent / 100);
     const advAmount = subTotal * (advancePercent / 100);
     const isrAmount = subTotal * (isrPercent / 100);
-    const amortizationAmount = selectedPrepayments.reduce((sum, p) => sum + p.AvailableBalance, 0);
-    const net = (subTotal + totalTax) - totalRetentionByLine - totalItbisRetention - retAmount - advAmount - isrAmount - amortizationAmount;
+    const netBeforeAmortization = (subTotal + totalTax) - totalRetentionByLine - totalItbisRetention - retAmount - advAmount - isrAmount;
 
-    return { subTotal, totalTax, retAmount, advAmount, isrAmount, amortizationAmount, totalRetentionByLine, totalItbisRetention, net };
+    let amortizationAmount = 0;
+    const amortizations = selectedPrepayments.map(p => {
+      const available = p.AvailableBalance || p.availableBalance || 0;
+      const percentage = p.percentage !== undefined ? p.percentage : 100;
+      const requested = available * (percentage / 100);
+
+      // Calculamos el valor solicitado sin límite para transparencia
+      const applied = requested;
+
+      if (applied > 0) {
+        amortizationAmount += applied;
+      }
+
+      return {
+        DocID: p.DocID || p.docID,
+        DocDate: p.DocDate || p.docDate,
+        AvailableBalance: available,
+        percentage,
+        Amount: applied
+      };
+    });
+
+    const net = netBeforeAmortization - amortizationAmount;
+
+    return { subTotal, totalTax, retAmount, advAmount, isrAmount, amortizationAmount, amortizations, totalRetentionByLine, totalItbisRetention, net };
   };
 
   const getRetentionsSummary = () => {
@@ -857,7 +880,9 @@ export const BoletinMedicion: React.FC = () => {
           advancePercent,
           isrPercent,
           receptionNumbers,
-          lines: linesPayload
+          lines: linesPayload,
+          amortizationAmount: totals.amortizationAmount,
+          amortizedPrepayments: JSON.stringify(totals.amortizations)
         })
       });
 
@@ -1555,8 +1580,9 @@ export const BoletinMedicion: React.FC = () => {
         try {
           const amortized = JSON.parse(boletin.amortizedPrepayments);
           amortized.forEach((p: any) => {
+            const appliedAmount = p.Amount !== undefined ? p.Amount : p.AvailableBalance;
             doc.text(`  - ${p.DocID}:`, labelX, currentY);
-            doc.text(`-$${formatCurrency(p.AvailableBalance)}`, valueX, currentY, { align: 'right' });
+            doc.text(`-$${formatCurrency(appliedAmount)}`, valueX, currentY, { align: 'right' });
             currentY += 5;
           });
           currentY += 1;
@@ -2598,12 +2624,17 @@ export const BoletinMedicion: React.FC = () => {
                         <th style={{ padding: '5px' }}>Sel.</th>
                         <th style={{ padding: '5px' }}>Documento</th>
                         <th style={{ padding: '5px' }}>Fecha</th>
-                        <th style={{ padding: '5px', textAlign: 'right' }}>Disponible</th>
+                        <th style={{ padding: '5px', textAlign: 'right' }}>Total Disponible</th>
+                        <th style={{ padding: '5px', textAlign: 'center' }}>% a Aplicar</th>
+                        <th style={{ padding: '5px', textAlign: 'right' }}>Monto a Aplicar</th>
                       </tr>
                     </thead>
                     <tbody>
                       {availablePrepayments.map(pref => {
-                        const isSelected = selectedPrepayments.some(sp => sp.DocID === pref.DocID);
+                        const selectedPref = selectedPrepayments.find(sp => (sp.DocID || sp.docID) === pref.DocID);
+                        const isSelected = !!selectedPref;
+                        const calculatedAmt = totals.amortizations?.find((a: any) => a.DocID === pref.DocID)?.Amount || 0;
+
                         return (
                           <tr key={pref.DocID} style={{ borderBottom: '1px solid #f1f8e9' }}>
                             <td style={{ padding: '5px' }}>
@@ -2612,9 +2643,9 @@ export const BoletinMedicion: React.FC = () => {
                                 checked={isSelected}
                                 onChange={(e) => {
                                   if (e.target.checked) {
-                                    setSelectedPrepayments([...selectedPrepayments, pref]);
+                                    setSelectedPrepayments([...selectedPrepayments, { ...pref, percentage: 100 }]);
                                   } else {
-                                    setSelectedPrepayments(selectedPrepayments.filter(sp => sp.DocID !== pref.DocID));
+                                    setSelectedPrepayments(selectedPrepayments.filter(sp => (sp.DocID || sp.docID) !== pref.DocID));
                                   }
                                 }}
                               />
@@ -2622,6 +2653,25 @@ export const BoletinMedicion: React.FC = () => {
                             <td style={{ padding: '5px' }}>{pref.DocID}</td>
                             <td style={{ padding: '5px' }}>{new Date(pref.DocDate).toLocaleDateString('es-ES')}</td>
                             <td style={{ padding: '5px', textAlign: 'right', fontWeight: 'bold' }}>${formatCurrency(pref.AvailableBalance)}</td>
+                            <td style={{ padding: '5px', textAlign: 'center' }}>
+                              {isSelected && (
+                                <input
+                                  type="number"
+                                  min="0" max="100"
+                                  value={selectedPref.percentage !== undefined ? selectedPref.percentage : 100}
+                                  onChange={(e) => {
+                                    const val = Math.max(0, Math.min(100, Number(e.target.value)));
+                                    setSelectedPrepayments(selectedPrepayments.map(sp =>
+                                      (sp.DocID || sp.docID) === pref.DocID ? { ...sp, percentage: val } : sp
+                                    ));
+                                  }}
+                                  style={{ width: '60px', textAlign: 'center', padding: '2px 4px', border: '1px solid #ccc', borderRadius: '4px' }}
+                                />
+                              )}
+                            </td>
+                            <td style={{ padding: '5px', textAlign: 'right', fontWeight: 'bold', color: isSelected ? '#d32f2f' : 'inherit' }}>
+                              {isSelected ? `$${formatCurrency(calculatedAmt)}` : '-'}
+                            </td>
                           </tr>
                         );
                       })}
@@ -2685,10 +2735,10 @@ export const BoletinMedicion: React.FC = () => {
                   {totals.amortizationAmount > 0 && (
                     <div style={{ padding: '10px', marginTop: '10px', backgroundColor: '#fff', borderRadius: '4px', border: '1px dashed #c8e6c9' }}>
                       <div style={{ fontSize: '0.8rem', color: '#2e7d32', fontWeight: 'bold', marginBottom: '5px' }}>Amortización de Adelantos:</div>
-                      {selectedPrepayments.map(sp => (
-                        <div key={sp.DocID} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.8rem', color: '#444' }}>
-                          <span>{sp.DocID}</span>
-                          <span>-${formatCurrency(sp.AvailableBalance)}</span>
+                      {totals.amortizations?.map((a: any) => (
+                        <div key={a.DocID} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.8rem', color: '#444' }}>
+                          <span>{a.DocID}</span>
+                          <span>-${formatCurrency(a.Amount)}</span>
                         </div>
                       ))}
                     </div>
