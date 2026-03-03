@@ -98,6 +98,7 @@ export const BoletinMedicion: React.FC = () => {
   const [isrPercent, setIsrPercent] = useState(0); // Nueva: Retención ISR
   const [measurementStartDate, setMeasurementStartDate] = useState<string | null>(null);
   const [measurementEndDate, setMeasurementEndDate] = useState<string | null>(null);
+  const [priority, setPriority] = useState<string>('Normal');
   const [isSaving, setIsSaving] = useState(false);
   const [viewHistory, setViewHistory] = useState(false);
   const [savedBoletines, setSavedBoletines] = useState<any[]>([]);
@@ -429,6 +430,7 @@ export const BoletinMedicion: React.FC = () => {
       setEditingId(null);
       setMeasurementStartDate(null);
       setMeasurementEndDate(null);
+      setPriority('Normal');
       setHasUnsavedChanges(false);
     }
   };
@@ -578,6 +580,7 @@ export const BoletinMedicion: React.FC = () => {
     setIsrPercent(boletin.isrPercent);
     setMeasurementStartDate(boletin.measurementStartDate || null);
     setMeasurementEndDate(boletin.measurementEndDate || null);
+    setPriority(boletin.priority || 'Normal');
     setHasUnsavedChanges(false); // Cargando datos guardados
 
     if (boletin.amortizedPrepayments) {
@@ -876,11 +879,12 @@ export const BoletinMedicion: React.FC = () => {
           vendorName: selectedTx.VendorName,
           vendorFiscalID: selectedTx.VendorFiscalID,
           projectName: selectedTx.ProjectName,
-          measurementStartDate: selectedTx.MeasurementStartDate,
-          measurementEndDate: selectedTx.MeasurementEndDate,
+          measurementStartDate,
+          measurementEndDate,
           retentionPercent,
           advancePercent,
           isrPercent,
+          priority,
           receptionNumbers,
           lines: linesPayload,
           amortizationAmount: totals.amortizationAmount,
@@ -2289,7 +2293,7 @@ export const BoletinMedicion: React.FC = () => {
                                 <td style={{ whiteSpace: 'nowrap' }}>{new Date(tx.DocDate).toLocaleDateString('es-ES')}</td>
                                 <td style={{ textAlign: 'right', fontWeight: '600', color: '#28a745' }}>${formatCurrency(tx.TotalAmount)}</td>
                                 <td style={{ textAlign: 'center' }}>
-                                  <button className="btn-small" onClick={() => window.open(`/?generateBoletin=${tx.ID}`, '_blank')}>Seleccionar</button>
+                                  <button className="btn-small" onClick={() => handleSelectOC(tx)}>Seleccionar</button>
                                 </td>
                               </tr>
                             ))}
@@ -2389,6 +2393,26 @@ export const BoletinMedicion: React.FC = () => {
               </div>
               <div>
                 <p><strong>Proyecto:</strong> {selectedTx.ProjectName || 'General'}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                  <strong>Prioridad:</strong>
+                  <select
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value)}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid #ccc',
+                      fontSize: '0.9rem',
+                      fontWeight: '600',
+                      color: priority === 'Urgente' ? '#d32f2f' : priority === 'Media' ? '#f57c00' : '#424242',
+                      backgroundColor: priority === 'Urgente' ? '#ffebee' : priority === 'Media' ? '#fff3e0' : '#f5f5f5'
+                    }}
+                  >
+                    <option value="Normal">Normal</option>
+                    <option value="Media">Media</option>
+                    <option value="Urgente">Urgente</option>
+                  </select>
+                </div>
                 {measurementStartDate && measurementEndDate && (() => {
                   // Parsear fechas sin problemas de zona horaria
                   const startDate = new Date(measurementStartDate.split('T')[0] + 'T12:00:00').toLocaleDateString('es-ES');
@@ -2808,6 +2832,7 @@ export const BoletinMedicion: React.FC = () => {
                     retentionPercent,
                     advancePercent,
                     isrPercent,
+                    priority,
                     cubicacionNo: editingId ? savedBoletines.find(b => b.id === editingId)?.cubicacionNo : '(Por asignar)',
                     status: editingId ? savedBoletines.find(b => b.id === editingId)?.status : 'PENDIENTE',
                     rejectionReason: editingId ? savedBoletines.find(b => b.id === editingId)?.rejectionReason : null,

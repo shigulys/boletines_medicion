@@ -1,5 +1,3 @@
-
-// ...existing code...
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -7,8 +5,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import multer from "multer";
 import * as XLSX from "xlsx";
-import { Prisma } from "@prisma/client";
-import prisma from "./db";
+import prisma, { pool as pgPool } from "./db";
 import { connectAdmCloud } from "./admcloud_db";
 import { sendApprovalEmail, sendNewRequestEmailToAdmin } from "./mail";
 
@@ -34,23 +31,7 @@ app.get("/api/admcloud/subsidiaries/:id", async (req, res) => {
     res.status(500).json({ message: "Error al consultar empresa", error: error.message });
   }
 });
-// Endpoint para obtener el nombre de la empresa por SubsidiaryID
-app.get("/api/admcloud/subsidiaries/:id", async (req, res) => {
-  const { id } = req.params;
-  try {
-    const pool = await connectAdmCloud();
-    const result = await pool.request()
-      .input("subsidiaryId", id)
-      .query("SELECT ID, Name FROM SA_Subsidiaries WHERE ID = @subsidiaryId");
-    if (result.recordset.length === 0) {
-      return res.status(404).json({ message: "Empresa no encontrada" });
-    }
-    const empresa = result.recordset[0];
-    res.json({ id: empresa.ID, name: empresa.Name });
-  } catch (error: any) {
-    res.status(500).json({ message: "Error al consultar empresa", error: error.message });
-  }
-});
+
 const PORT = 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "default_secret";
 
@@ -59,6 +40,33 @@ const upload = multer({ storage: multer.memoryStorage() });
 console.log("-----------------------------------------");
 console.log("INICIANDO SERVIDOR SISTEMA DE OBRA v1.6");
 console.log("-----------------------------------------");
+
+// Diagnostic endpoint - no auth required, tests pg pool
+app.get("/api/debug/pool", async (req, res) => {
+  try {
+    const result = await pgPool.query('SELECT id, email FROM "User" LIMIT 3');
+    res.json({ ok: true, count: result.rows.length, sample: result.rows });
+  } catch (err: any) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+// Diagnostic endpoint - decode a JWT token to check its contents
+app.get("/api/debug/token", async (req, res) => {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+  if (!token) return res.status(400).json({ error: "No token provided" });
+  try {
+    const JWT_SECRET_LOCAL = process.env.JWT_SECRET || "default_secret";
+    const decoded: any = jwt.verify(token, JWT_SECRET_LOCAL);
+    // Try to look up user
+    const userId = parseInt(decoded.userId);
+    const userResult = await pgPool.query('SELECT id, email, "isApproved" FROM "User" WHERE id = $1', [userId]);
+    res.json({ decoded, userId, dbResult: userResult.rows });
+  } catch (err: any) {
+    res.json({ error: err.message });
+  }
+});
 
 app.use(cors({
   origin: 'http://localhost:5173',
@@ -71,7 +79,7 @@ const normalizePrismaDecimals = (value: unknown): unknown => {
     return value;
   }
 
-  if (Prisma.Decimal.isDecimal(value)) {
+  if (value && typeof value === 'object' && (value.constructor?.name === 'Decimal' || typeof (value as any).toNumber === 'function')) {
     return Number(value.toString());
   }
 
@@ -101,30 +109,34 @@ app.use((req, res, next) => {
 });
 
 // Auth Middleware
-const authenticateToken = (req: any, res: any, next: () => void) => {
+const authenticateToken = async (req: any, res: any, next: () => void) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
   if (!token) return res.status(401).json({ message: "No token provided" });
 
-  jwt.verify(token, JWT_SECRET, async (err: any, decoded: any) => {
-    if (err) return res.status(403).json({ message: "Invalid token" });
+  try {
+    const decoded: any = jwt.verify(token, JWT_SECRET);
 
     // Verificar si el usuario aún existe y está aprobado
-    try {
-      const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
-      if (!user) return res.status(404).json({ message: "User no longer exists" });
+    const userId = parseInt(decoded.userId);
+    const userResult = await pgPool.query('SELECT * FROM "User" WHERE id = $1', [userId]);
+    const user = userResult.rows[0];
+    if (!user) return res.status(404).json({ message: "User no longer exists" });
 
-      if (!user.isApproved) {
-        return res.status(403).json({ message: "Acceso revocado. Contacte a TI." });
-      }
-
-      req.user = { ...decoded, ...user }; // Pasar los datos completos del usuario
-      next();
-    } catch {
-      res.status(500).json({ message: "Error in authentication" });
+    if (!user.isApproved) {
+      return res.status(403).json({ message: "Acceso revocado. Contacte a TI." });
     }
-  });
+
+    req.user = { ...decoded, ...user }; // Pasar los datos completos del usuario
+    next();
+  } catch (authErr: any) {
+    if (authErr?.name === 'JsonWebTokenError' || authErr?.name === 'TokenExpiredError') {
+      return res.status(403).json({ message: "Invalid token" });
+    }
+    console.error("🔴 Error in authenticateToken:", authErr?.message);
+    res.status(500).json({ message: "Error in authentication" });
+  }
 };
 
 // Register
@@ -182,7 +194,8 @@ app.post("/api/login", async (req, res) => {
   console.log(`Intento de login para: ${email}`);
 
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
+    const userResult = await pgPool.query('SELECT * FROM "User" WHERE email = $1', [email]);
+    const user = userResult.rows[0];
     if (!user) return res.status(400).json({ message: "User not found" });
 
     const validPassword = await bcrypt.compare(password, user.password);
@@ -225,19 +238,8 @@ app.post("/api/login", async (req, res) => {
 // Get all users
 app.get("/api/users", authenticateToken, async (req, res) => {
   try {
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isApproved: true,
-        accessIngenieria: true,
-        accessSubcontratos: true,
-        accessContabilidad: true,
-        position: true,
-      }
-    });
+    const result = await pgPool.query('SELECT id, email, name, role, "isApproved", "accessIngenieria", "accessSubcontratos", "accessContabilidad", position FROM "User"');
+    const users = result.rows;
 
     console.log(`Debug API Users: Encontrados ${users.length} usuarios. Keys del primero:`, Object.keys(users[0] || {}));
 
@@ -720,7 +722,8 @@ app.get("/api/admcloud/employees", authenticateToken, async (req, res) => {
 // GET: Obtener todas las firmas configuradas
 app.get("/api/signature-config", authenticateToken, async (req, res) => {
   try {
-    const configs = await prisma.signatureConfig.findMany({ orderBy: { sortOrder: 'asc' } });
+    // Usar queryRaw para asegurar que obtenemos el campo 'alias' aunque Prisma no lo reconozca en el modelo
+    const configs = await prisma.$queryRawUnsafe('SELECT * FROM "SignatureConfig" ORDER BY "sortOrder" ASC');
     res.json(configs);
   } catch (error: any) {
     res.status(500).json({ message: "Error al obtener configuración de firmas", detail: error.message });
@@ -734,18 +737,21 @@ app.put("/api/signature-config", authenticateToken, async (req, res) => {
   try {
     await prisma.signatureConfig.deleteMany({});
     if (signatures.length > 0) {
-      await prisma.signatureConfig.createMany({
-        data: signatures
-          .filter(s => s.name?.trim())
-          .map((s, i) => ({
-            name: s.name.trim(),
-            alias: s.alias?.trim() || null,
-            role: s.role?.trim() || '',
-            sortOrder: i
-          }))
-      });
+      // Usar un loop con executeRaw porque Prisma CLI está roto y no reconoce 'alias'
+      for (let i = 0; i < signatures.length; i++) {
+        const s = signatures[i];
+        if (!s.name?.trim()) continue;
+
+        await prisma.$executeRawUnsafe(
+          'INSERT INTO "SignatureConfig" ("name", "alias", "role", "sortOrder") VALUES ($1, $2, $3, $4)',
+          s.name.trim(),
+          s.alias?.trim() || null,
+          s.role?.trim() || '',
+          i
+        );
+      }
     }
-    const updated = await prisma.signatureConfig.findMany({ orderBy: { sortOrder: 'asc' } });
+    const updated = await prisma.$queryRawUnsafe('SELECT * FROM "SignatureConfig" ORDER BY "sortOrder" ASC');
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ message: "Error al guardar configuración de firmas", detail: error.message });
@@ -885,19 +891,16 @@ app.get("/api/admcloud/transactions/:id/items", authenticateToken, async (req, r
 
     const admItems = result.recordset;
 
-    // Obtener lo ya pagado/solicitado en nuestra DB (excluyendo lo rechazado)
-    const paidQuantities = await prisma.paymentRequestLine.groupBy({
-      by: ['externalItemID'],
-      where: {
-        paymentRequest: {
-          externalTxID: id,
-          status: { not: "RECHAZADO" }
-        }
-      },
-      _sum: {
-        quantity: true
-      }
-    });
+    // Obtener lo ya pagado/solicitado en nuestra DB (excluyendo lo rechazado) - usando raw SQL
+    const paidResult = await pgPool.query(`
+      SELECT prl."externalItemID", SUM(prl.quantity) as total_paid
+      FROM "PaymentRequestLine" prl
+      JOIN "PaymentRequest" pr ON prl."paymentRequestId" = pr.id
+      WHERE pr."externalTxID" = $1
+        AND pr.status != 'RECHAZADO'
+      GROUP BY prl."externalItemID"
+    `, [id]);
+    const paidQuantities = paidResult.rows;
 
     // Mapear los resultados
     const finalItems = admItems.map((it: any) => {
@@ -1026,7 +1029,7 @@ const resolveScheduledLine = (paymentRequest: any) => {
 
 app.post("/api/payment-requests", authenticateToken, async (req, res) => {
   const {
-    externalTxID, docID, vendorName, vendorFiscalID, projectName,
+    externalTxID, docID, vendorName, vendorFiscalID, projectName, priority,
     lines, retentionPercent, advancePercent, isrPercent,
     receptionNumbers, measurementStartDate, measurementEndDate,
     signatures, amortizationAmount, amortizedPrepayments
@@ -1111,6 +1114,7 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
     const isrAmount = subTotal * (isrPercent / 100);
     const netTotal = (subTotal + taxAmount) - totalRetentionByLine - totalItbisRetention - retentionAmount - advanceAmount - isrAmount;
 
+    console.log("💾 [POST /api/payment-requests] Creating PaymentRequest in Prisma...");
     const pr = await prisma.paymentRequest.create({
       data: {
         docNumber,
@@ -1135,12 +1139,30 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
         amortizationAmount: amortizationAmount || 0,
         amortizedPrepayments: amortizedPrepayments || null,
         netTotal,
+        // priority field removed from Prisma create due to client generation issues
         lines: { create: formattedLines }
       },
       include: { lines: true }
     });
+
+    console.log("✅ [POST /api/payment-requests] PaymentRequest created, ID:", pr.id);
+
+    // Workaround: Actualizar prioridad usando SQL crudo porque Prisma CLI está roto en este ambiente
+    try {
+      console.log("🛠️ [POST /api/payment-requests] Updating priority via raw SQL...");
+      await prisma.$executeRawUnsafe(
+        'UPDATE "PaymentRequest" SET "priority" = $1 WHERE "id" = $2',
+        priority || "Normal",
+        pr.id
+      );
+      (pr as any).priority = priority || "Normal";
+    } catch (e) {
+      console.error("❌ Error al actualizar prioridad via SQL:", e);
+    }
+
     res.status(201).json(pr);
   } catch (error: any) {
+    console.error("🚨 [POST /api/payment-requests] Error:", error);
     res.status(500).json({ message: "Error al crear el boletín", detail: error.message });
   }
 });
@@ -1148,30 +1170,44 @@ app.post("/api/payment-requests", authenticateToken, async (req, res) => {
 app.get("/api/payment-requests", authenticateToken, async (req, res) => {
   try {
     console.log("📥 [GET /api/payment-requests] Request received");
-    const prs = await prisma.paymentRequest.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        lines: true,
-        paymentScheduleLines: {
-          include: {
-            paymentSchedule: {
-              select: {
-                id: true,
-                scheduleNumber: true,
-                status: true
-              }
-            }
-          }
-        }
-      }
-    });
+
+    const query = `
+      SELECT pr.*, 
+        COALESCE(
+          (SELECT json_agg(row_to_json(l)) FROM "PaymentRequestLine" l WHERE l."paymentRequestId" = pr.id),
+          '[]'::json
+        ) as lines,
+        COALESCE(
+          (SELECT json_agg(
+             json_build_object(
+               'id', psl.id,
+               'paymentRequestId', psl."paymentRequestId",
+               'paymentScheduleId', psl."paymentScheduleId",
+               'paymentSchedule', (
+                  SELECT json_build_object(
+                    'id', ps.id,
+                    'scheduleNumber', ps."scheduleNumber",
+                    'status', ps.status
+                  ) FROM "PaymentSchedule" ps WHERE ps.id = psl."paymentScheduleId"
+               )
+             )
+           ) FROM "PaymentScheduleLine" psl WHERE psl."paymentRequestId" = pr.id),
+           '[]'::json
+        ) as "paymentScheduleLines"
+      FROM "PaymentRequest" pr
+      ORDER BY pr."createdAt" DESC;
+    `;
+
+    const result = await pgPool.query(query);
+    const prs = result.rows;
 
     const fs = await import('fs');
-    fs.appendFileSync('server_debug_log.txt', `[GET] ${new Date().toISOString()} Found ${prs.length} bulletins. First item cubicacionNo: ${prs[0]?.cubicacionNo}\n`);
+    fs.appendFileSync('server_debug_log.txt', `[GET] ${new Date().toISOString()} Found ${prs.length} bulletins via RAW SQL. First item cubicacionNo: ${prs[0]?.cubicacionNo}\n`);
 
     res.json(prs);
-  } catch (error) {
-    res.status(500).json({ message: "Error al obtener boletines" });
+  } catch (error: any) {
+    console.error("Error al obtener boletines:", error);
+    res.status(500).json({ message: "Error al obtener boletines", detail: error.message });
   }
 });
 
@@ -1179,7 +1215,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
   const {
     lines, retentionPercent, advancePercent, isrPercent,
-    receptionNumbers, vendorFiscalID, measurementStartDate, measurementEndDate, vendorName,
+    receptionNumbers, vendorFiscalID, measurementStartDate, measurementEndDate, vendorName, priority,
     signatures, amortizationAmount, amortizedPrepayments
   } = req.body;
 
@@ -1312,6 +1348,7 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
           amortizationAmount: amortizationAmount || 0,
           amortizedPrepayments: amortizedPrepayments || null,
           netTotal,
+          // priority field removed from Prisma update due to client generation issues
           receptionNumbers,
           cubicacionNo,
           vendorName: vendorName ? normalizeVendorName(vendorName) : existingPR.vendorName,
@@ -1324,6 +1361,18 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
         include: { lines: true }
       });
     });
+
+    // Workaround: Actualizar prioridad usando SQL crudo porque Prisma CLI está roto en este ambiente
+    try {
+      await prisma.$executeRawUnsafe(
+        'UPDATE "PaymentRequest" SET "priority" = $1 WHERE "id" = $2',
+        priority || existingPR.priority || "Normal",
+        prId
+      );
+      (updatedPR as any).priority = priority || existingPR.priority || "Normal";
+    } catch (e) {
+      console.error("Error al actualizar prioridad via SQL:", e);
+    }
 
     const fs = await import('fs');
     fs.appendFileSync('server_debug_log.txt', `[PUT] ${new Date().toISOString()} ID: ${prId} (${existingPR.docNumber}) assigned cubicacionNo: ${cubicacionNo}\n`);
@@ -2071,10 +2120,8 @@ app.get("/api/units-of-measure", authenticateToken, async (req: any, res) => {
   }
 
   try {
-    const units = await prisma.unitOfMeasure.findMany({
-      orderBy: { code: 'asc' }
-    });
-    res.json(units);
+    const result = await pgPool.query('SELECT * FROM "UnitOfMeasure" ORDER BY code ASC');
+    res.json(result.rows);
   } catch (error: any) {
     res.status(500).json({ message: "Error al obtener unidades de medida", detail: error.message });
   }
@@ -2082,11 +2129,8 @@ app.get("/api/units-of-measure", authenticateToken, async (req: any, res) => {
 
 app.get("/api/units-of-measure/active", authenticateToken, async (req: any, res) => {
   try {
-    const units = await prisma.unitOfMeasure.findMany({
-      where: { isActive: true },
-      orderBy: { code: 'asc' }
-    });
-    res.json(units);
+    const result = await pgPool.query('SELECT * FROM "UnitOfMeasure" WHERE "isActive" = true ORDER BY code ASC');
+    res.json(result.rows);
   } catch (error: any) {
     res.status(500).json({ message: "Error al obtener unidades activas", detail: error.message });
   }
@@ -2105,14 +2149,11 @@ app.post("/api/units-of-measure", authenticateToken, async (req: any, res) => {
   }
 
   try {
-    const unit = await prisma.unitOfMeasure.create({
-      data: {
-        code: normalizedCode,
-        name: name.trim(),
-        description: description?.trim() || null
-      }
-    });
-    res.status(201).json(unit);
+    const result = await pgPool.query(
+      'INSERT INTO "UnitOfMeasure" (code, name, description, "isActive", "createdAt", "updatedAt") VALUES ($1, $2, $3, true, NOW(), NOW()) RETURNING *',
+      [normalizedCode, name.trim(), description?.trim() || null]
+    );
+    res.status(201).json(result.rows[0]);
   } catch (error: any) {
     if (error.code === 'P2002') {
       return res.status(400).json({ message: "Ya existe una unidad con ese código" });
@@ -2135,16 +2176,11 @@ app.put("/api/units-of-measure/:id", authenticateToken, async (req: any, res) =>
   }
 
   try {
-    const unit = await prisma.unitOfMeasure.update({
-      where: { id: parseInt(id) },
-      data: {
-        code: normalizedCode,
-        name: name.trim(),
-        description: description?.trim() || null,
-        isActive: typeof isActive === 'boolean' ? isActive : true
-      }
-    });
-    res.json(unit);
+    const result = await pgPool.query(
+      'UPDATE "UnitOfMeasure" SET code = $1, name = $2, description = $3, "isActive" = $4, "updatedAt" = NOW() WHERE id = $5 RETURNING *',
+      [normalizedCode, name.trim(), description?.trim() || null, typeof isActive === 'boolean' ? isActive : true, parseInt(id)]
+    );
+    res.json(result.rows[0]);
   } catch (error: any) {
     if (error.code === 'P2002') {
       return res.status(400).json({ message: "Ya existe una unidad con ese código" });
@@ -2161,9 +2197,7 @@ app.delete("/api/units-of-measure/:id", authenticateToken, async (req: any, res)
   const { id } = req.params;
 
   try {
-    await prisma.unitOfMeasure.delete({
-      where: { id: parseInt(id) }
-    });
+    await pgPool.query('DELETE FROM "UnitOfMeasure" WHERE id = $1', [parseInt(id)]);
     res.json({ message: "Unidad eliminada con éxito" });
   } catch (error: any) {
     res.status(500).json({ message: "Error al eliminar unidad de medida", detail: error.message });
@@ -2173,10 +2207,8 @@ app.delete("/api/units-of-measure/:id", authenticateToken, async (req: any, res)
 // Obtener todas las retenciones
 app.get("/api/retentions", authenticateToken, async (req: any, res) => {
   try {
-    const retentions = await prisma.retention.findMany({
-      orderBy: { code: 'asc' }
-    });
-    res.json(retentions);
+    const result = await pgPool.query('SELECT * FROM "Retention" ORDER BY code ASC');
+    res.json(result.rows);
   } catch (error: any) {
     res.status(500).json({ message: "Error al obtener retenciones", detail: error.message });
   }
@@ -2185,11 +2217,8 @@ app.get("/api/retentions", authenticateToken, async (req: any, res) => {
 // Obtener retenciones activas (para usar en formularios)
 app.get("/api/retentions/active", authenticateToken, async (req: any, res) => {
   try {
-    const retentions = await prisma.retention.findMany({
-      where: { isActive: true },
-      orderBy: { code: 'asc' }
-    });
-    res.json(retentions);
+    const result = await pgPool.query('SELECT * FROM "Retention" WHERE "isActive" = true ORDER BY code ASC');
+    res.json(result.rows);
   } catch (error: any) {
     res.status(500).json({ message: "Error al obtener retenciones activas", detail: error.message });
   }
@@ -2205,10 +2234,11 @@ app.post("/api/retentions", authenticateToken, async (req: any, res) => {
   }
 
   try {
-    const retention = await prisma.retention.create({
-      data: { code, name, percentage, description }
-    });
-    res.status(201).json(retention);
+    const result = await pgPool.query(
+      'INSERT INTO "Retention" (code, name, percentage, description, "isActive", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, true, NOW(), NOW()) RETURNING *',
+      [code, name, percentage, description]
+    );
+    res.status(201).json(result.rows[0]);
   } catch (error: any) {
     if (error.code === 'P2002') {
       res.status(400).json({ message: "Ya existe una retención con ese código" });
@@ -2229,11 +2259,11 @@ app.put("/api/retentions/:id", authenticateToken, async (req: any, res) => {
   }
 
   try {
-    const retention = await prisma.retention.update({
-      where: { id: parseInt(id) },
-      data: { code, name, percentage, description, isActive }
-    });
-    res.json(retention);
+    const result = await pgPool.query(
+      'UPDATE "Retention" SET code = $1, name = $2, percentage = $3, description = $4, "isActive" = $5, "updatedAt" = NOW() WHERE id = $6 RETURNING *',
+      [code, name, percentage, description, typeof isActive === 'boolean' ? isActive : true, parseInt(id)]
+    );
+    res.json(result.rows[0]);
   } catch (error: any) {
     if (error.code === 'P2002') {
       res.status(400).json({ message: "Ya existe una retención con ese código" });

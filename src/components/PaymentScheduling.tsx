@@ -15,6 +15,7 @@ type PaymentRequest = {
   projectName?: string | null;
   netTotal: number;
   status: PaymentRequestStatus;
+  priority: string;
 };
 
 type PaymentSchedule = {
@@ -520,6 +521,7 @@ export const PaymentScheduling: React.FC = () => {
       OC: string;
       Proyecto: string;
       Proveedor: string;
+      Prioridad: string;
       Estado: string;
       Neto: number;
     }> = visibleLines.map((line) => ({
@@ -527,6 +529,7 @@ export const PaymentScheduling: React.FC = () => {
       OC: line.paymentRequest.docID,
       Proyecto: line.paymentRequest.projectName || 'Sin proyecto',
       Proveedor: line.paymentRequest.vendorName,
+      Prioridad: line.paymentRequest.priority || 'Normal',
       Estado: line.paymentRequest.status,
       Neto: Number(line.paymentRequest.netTotal) || 0
     }));
@@ -537,6 +540,7 @@ export const PaymentScheduling: React.FC = () => {
       OC: '',
       Proyecto: '',
       Proveedor: 'TOTAL PROGRAMACIÓN',
+      Prioridad: '',
       Estado: '',
       Neto: total
     });
@@ -547,6 +551,7 @@ export const PaymentScheduling: React.FC = () => {
       { wch: 15 },
       { wch: 28 },
       { wch: 30 },
+      { wch: 12 },
       { wch: 14 },
       { wch: 18 }
     ];
@@ -569,12 +574,13 @@ export const PaymentScheduling: React.FC = () => {
 
     autoTable(doc, {
       startY: 36,
-      head: [['Boletín', 'OC', 'Proyecto', 'Proveedor', 'Estado', 'Neto']],
+      head: [['Boletín', 'OC', 'Proyecto', 'Proveedor', 'Prioridad', 'Estado', 'Neto']],
       body: visibleLines.map((line) => [
         line.paymentRequest.docNumber,
         line.paymentRequest.docID,
         line.paymentRequest.projectName || 'Sin proyecto',
         line.paymentRequest.vendorName,
+        line.paymentRequest.priority || 'Normal',
         line.paymentRequest.status,
         `$${formatCurrency(Number(line.paymentRequest.netTotal) || 0)}`
       ])
@@ -600,6 +606,7 @@ export const PaymentScheduling: React.FC = () => {
       OC: string;
       Proyecto: string;
       Proveedor: string;
+      Prioridad: string;
       EstadoBoletin: string;
       Neto: number;
     }> = [];
@@ -620,6 +627,7 @@ export const PaymentScheduling: React.FC = () => {
           OC: line.paymentRequest.docID,
           Proyecto: line.paymentRequest.projectName || 'Sin proyecto',
           Proveedor: line.paymentRequest.vendorName,
+          Prioridad: line.paymentRequest.priority || 'Normal',
           EstadoBoletin: line.paymentRequest.status,
           Neto: Number(line.paymentRequest.netTotal) || 0
         });
@@ -633,6 +641,7 @@ export const PaymentScheduling: React.FC = () => {
         OC: '',
         Proyecto: '',
         Proveedor: 'TOTAL PROGRAMACIÓN',
+        Prioridad: '',
         EstadoBoletin: '',
         Neto: scheduleTotal
       });
@@ -646,6 +655,7 @@ export const PaymentScheduling: React.FC = () => {
       OC: '',
       Proyecto: '',
       Proveedor: 'TOTAL GLOBAL FILTRO',
+      Prioridad: '',
       EstadoBoletin: '',
       Neto: globalTotal
     });
@@ -658,6 +668,7 @@ export const PaymentScheduling: React.FC = () => {
       { wch: 16 },
       { wch: 14 },
       { wch: 24 },
+      { wch: 12 },
       { wch: 28 },
       { wch: 14 },
       { wch: 16 }
@@ -717,6 +728,7 @@ export const PaymentScheduling: React.FC = () => {
           line.paymentRequest.docNumber,
           line.paymentRequest.vendorName,
           line.paymentRequest.projectName || 'Sin proyecto',
+          line.paymentRequest.priority || 'Normal',
           line.paymentRequest.status,
           `$${formatCurrency(Number(line.paymentRequest.netTotal) || 0)}`
         ]);
@@ -728,13 +740,14 @@ export const PaymentScheduling: React.FC = () => {
         '',
         '',
         '',
+        '',
         `$${formatCurrency(scheduleTotal)}`
       ]);
     });
 
     autoTable(doc, {
       startY: 30,
-      head: [['Programación', 'Boletín', 'Proveedor', 'Proyecto', 'Estado', 'Neto']],
+      head: [['Programación', 'Boletín', 'Proveedor', 'Proyecto', 'Prioridad', 'Estado', 'Neto']],
       body: bodyRows
     });
 
@@ -855,6 +868,7 @@ export const PaymentScheduling: React.FC = () => {
                     <th style={{ padding: '10px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>OC</th>
                     <th style={{ padding: '10px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Proyecto</th>
                     <th style={{ padding: '10px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Proveedor</th>
+                    <th style={{ padding: '10px', borderBottom: '1px solid #ddd', textAlign: 'center' }}>Prioridad</th>
                     <th style={{ padding: '10px', borderBottom: '1px solid #ddd', textAlign: 'right' }}>Neto</th>
                     <th style={{ padding: '10px', borderBottom: '1px solid #ddd', textAlign: 'center' }}>Estado</th>
                     {canApprovePaymentRequests && (
@@ -879,6 +893,15 @@ export const PaymentScheduling: React.FC = () => {
                         <td style={{ padding: '10px', borderBottom: '1px solid #f0f0f0' }}>{request.docID}</td>
                         <td style={{ padding: '10px', borderBottom: '1px solid #f0f0f0' }}>{request.projectName || 'Sin proyecto'}</td>
                         <td style={{ padding: '10px', borderBottom: '1px solid #f0f0f0' }}>{request.vendorName}</td>
+                        <td style={{ padding: '10px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}>
+                          {request.priority === 'Urgente' ? (
+                            <span style={{ backgroundColor: '#ffebee', color: '#c62828', padding: '3px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>Urgente</span>
+                          ) : request.priority === 'Media' ? (
+                            <span style={{ backgroundColor: '#fff3e0', color: '#e65100', padding: '3px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>Media</span>
+                          ) : (
+                            <span style={{ color: '#757575', fontSize: '0.9rem' }}>Normal</span>
+                          )}
+                        </td>
                         <td style={{ padding: '10px', borderBottom: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 600 }}>${formatCurrency(request.netTotal)}</td>
                         <td style={{ padding: '10px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}>
                           <span style={{
@@ -1191,6 +1214,7 @@ export const PaymentScheduling: React.FC = () => {
                             <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Boletín</th>
                             <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Proveedor</th>
                             <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'left' }}>Proyecto</th>
+                            <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'center' }}>Prioridad</th>
                             <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'right' }}>Neto</th>
                             <th style={{ padding: '8px', borderBottom: '1px solid #ddd', textAlign: 'center' }}>Estado</th>
                             {canApprovePaymentRequests && (
@@ -1207,6 +1231,15 @@ export const PaymentScheduling: React.FC = () => {
                                 <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0', fontWeight: 600 }}>{request.docNumber}</td>
                                 <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0' }}>{request.vendorName}</td>
                                 <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0' }}>{request.projectName || 'Sin proyecto'}</td>
+                                <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}>
+                                  {request.priority === 'Urgente' ? (
+                                    <span style={{ backgroundColor: '#ffebee', color: '#c62828', padding: '3px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>Urgente</span>
+                                  ) : request.priority === 'Media' ? (
+                                    <span style={{ backgroundColor: '#fff3e0', color: '#e65100', padding: '3px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>Media</span>
+                                  ) : (
+                                    <span style={{ color: '#757575', fontSize: '0.85rem' }}>Normal</span>
+                                  )}
+                                </td>
                                 <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0', textAlign: 'right' }}>${formatCurrency(request.netTotal)}</td>
                                 <td style={{ padding: '8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}>{request.status}</td>
                                 {canApprovePaymentRequests && (
