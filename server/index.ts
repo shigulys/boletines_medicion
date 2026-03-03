@@ -1014,7 +1014,7 @@ const getValidUnitCodes = async (lines: any[]) => {
     select: { code: true }
   });
 
-  return new Set(units.map((unit) => unit.code));
+  return new Set(units.map((u) => u.code));
 };
 
 const resolveScheduledLine = (paymentRequest: any) => {
@@ -1285,8 +1285,12 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
         throw new Error(`La unidad de medida es obligatoria para la partida \"${l.description}\".`);
       }
 
+      // 🔍 DEBUG: Imprimir unidad normalizada y catálogo
+      console.log(`[DEBUG] Validando unidad: "${normalizedUnit}" para partida: "${l.description}"`);
+      console.log(`[DEBUG] Unidades válidas disponibles:`, Array.from(validUnitCodes));
+
       if (!validUnitCodes.has(normalizedUnit)) {
-        throw new Error(`La unidad de medida \"${normalizedUnit}\" no existe en el catálogo.`);
+        throw new Error(`La unidad de medida \"${normalizedUnit}\" no existe en el catálogo. Unidades disponibles: ${Array.from(validUnitCodes).join(', ')}`);
       }
 
       const previousUnit = previousUnitsByItem.get(l.externalItemID);
@@ -1294,12 +1298,19 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
         throw new Error(`La partida \"${l.description}\" debe usar la unidad \"${previousUnit}\" según el boletín anterior.`);
       }
 
-      const lineTax = l.quantity * l.unitPrice * (l.taxPercent / 100);
-      const lineRetention = (l.quantity * l.unitPrice) * ((l.retentionPercent || 0) / 100);
-      const lineItbisRetention = lineTax * ((l.itbisRetentionPercent || 0) / 100);
-      const lineTotal = (l.quantity * l.unitPrice) + lineTax - lineRetention - lineItbisRetention;
+      // Convertir valores a números explícitamente para evitar problemas de tipos
+      const quantity = parseFloat(l.quantity) || 0;
+      const unitPrice = parseFloat(l.unitPrice) || 0;
+      const taxPercent = parseFloat(l.taxPercent) || 0;
+      const retentionPercentLine = parseFloat(l.retentionPercent) || 0;
+      const itbisRetentionPercent = parseFloat(l.itbisRetentionPercent) || 0;
 
-      subTotal += (l.quantity * l.unitPrice);
+      const lineTax = quantity * unitPrice * (taxPercent / 100);
+      const lineRetention = (quantity * unitPrice) * (retentionPercentLine / 100);
+      const lineItbisRetention = lineTax * (itbisRetentionPercent / 100);
+      const lineTotal = (quantity * unitPrice) + lineTax - lineRetention - lineItbisRetention;
+
+      subTotal += (quantity * unitPrice);
       taxAmount += lineTax;
       totalRetentionByLine += lineRetention;
       totalItbisRetention += lineItbisRetention;
@@ -1309,25 +1320,25 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
         description: l.description,
         unitOfMeasure: normalizedUnit,
         receptionNumbers: l.receptionNumbers,
-        quantity: l.quantity,
-        unitPrice: l.unitPrice,
+        quantity,
+        unitPrice,
         taxType: l.taxType,
-        taxPercent: l.taxPercent,
+        taxPercent,
         taxAmount: lineTax,
-        retentionPercent: l.retentionPercent || 0,
+        retentionPercent: retentionPercentLine,
         retentionAmount: lineRetention,
-        itbisRetentionPercent: l.itbisRetentionPercent || 0,
+        itbisRetentionPercent: itbisRetentionPercent,
         totalLine: lineTotal
       };
     });
 
-    const retentionAmount = subTotal * (retentionPercent / 100);
-    const advanceAmount = subTotal * (advancePercent / 100);
-    const isrAmount = subTotal * (isrPercent / 100);
-    const netTotal = (subTotal + taxAmount) - totalRetentionByLine - totalItbisRetention - retentionAmount - advanceAmount - isrAmount - (amortizationAmount || 0);
+    const retentionAmount = parseFloat(retentionPercent) / 100 * subTotal;
+    const advanceAmount = parseFloat(advancePercent) / 100 * subTotal;
+    const isrAmount = parseFloat(isrPercent) / 100 * subTotal;
+    const netTotal = (subTotal + taxAmount) - totalRetentionByLine - totalItbisRetention - retentionAmount - advanceAmount - isrAmount - (parseFloat(amortizationAmount) || 0);
 
     // Actualizar usando una transacción para borrar lineas viejas y crear nuevas
-    const updatedPR = await prisma.$transaction(async (tx) => {
+    const updatedPR = await prisma.$transaction(async (tx: any) => {
       // Borrar lineas anteriores
       await tx.paymentRequestLine.deleteMany({
         where: { paymentRequestId: prId }
@@ -1379,7 +1390,12 @@ app.put("/api/payment-requests/:id", authenticateToken, async (req, res) => {
 
     res.json(updatedPR);
   } catch (error: any) {
-    res.status(500).json({ message: "Error al actualizar el boletín", detail: error.message });
+    console.error("❌ ERROR EN PUT /api/payment-requests/:id:", error);
+    res.status(500).json({ 
+      message: "Error al actualizar el boletín", 
+      detail: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined 
+    });
   }
 });
 
