@@ -572,3 +572,13 @@
 [GET] 2026-03-04T19:20:01.101Z Found 5 bulletins via RAW SQL. First item cubicacionNo: 5
 [GET] 2026-03-04T19:20:01.346Z Found 5 bulletins via RAW SQL. First item cubicacionNo: 5
 [GET] 2026-03-04T19:21:36.447Z Found 5 bulletins via RAW SQL. First item cubicacionNo: 5
+[GET] 2026-03-04T20:05:17.261Z Found 5 bulletins via RAW SQL. First item cubicacionNo: 5
+[GET] 2026-03-04T20:05:22.771Z Found 5 bulletins via RAW SQL. First item cubicacionNo: 5
+[GET] 2026-03-04T20:05:23.015Z Found 5 bulletins via RAW SQL. First item cubicacionNo: 5
+[GET] 2026-03-04T20:05:24.576Z Found 5 bulletins via RAW SQL. First item cubicacionNo: 5
+[GET] 2026-03-04T20:21:08.222Z Found 5 bulletins via RAW SQL. First item cubicacionNo: 5
+[GET] 2026-03-04T20:21:08.525Z Found 5 bulletins via RAW SQL. First item cubicacionNo: 5
+[GET] 2026-03-04T20:21:08.838Z Found 5 bulletins via RAW SQL. First item cubicacionNo: 5
+[PUT] 2026-03-04T20:21:34.863Z ID: 5 (BM-000005) assigned cubicacionNo: 5
+[GET] 2026-03-04T20:21:35.248Z Found 5 bulletins via RAW SQL. First item cubicacionNo: 5
+[GET] 2026-03-04T20:21:35.597Z Found 5 bulletins via RAW SQL. First item cubicacionNo: 5
