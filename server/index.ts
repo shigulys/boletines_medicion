@@ -911,7 +911,7 @@ app.get("/api/admcloud/transactions/:id/items", authenticateToken, async (req, r
       const item = {
         ...it,
         ReceptionNumbers: receptions,
-        PaidQuantity: paidObj?._sum?.quantity || 0
+        PaidQuantity: paidObj ? parseFloat(paidObj.total_paid) : 0
       };
 
       // Log para depuración de impuestos

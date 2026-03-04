@@ -661,7 +661,12 @@ export const BoletinMedicion: React.FC = () => {
         // Mapear items de la OC, marcando seleccionados los que ya estaban en el boletín
         const initialLines = ocItems.map((it: TransactionItem) => {
           const existingLine = boletin.lines.find((l: any) => l.externalItemID === it.ItemID);
-          const alreadyPaidByOthers = it.PaidQuantity - (existingLine ? existingLine.quantity : 0);
+          const existingQty = existingLine ? existingLine.quantity : 0;
+          // Si la cantidad pagada es menor a la cantidad actual del boletín, asumimos que NO incluye este boletín
+          // y por tanto lo pagado por otros es simplemente el total pagado.
+          const alreadyPaidByOthers = (it.PaidQuantity >= existingQty) 
+            ? (it.PaidQuantity - existingQty) 
+            : it.PaidQuantity;
           const available = it.ReceivedQuantity - alreadyPaidByOthers;
 
           // Si hay una línea existente, usar su receptionNumbers, si no, extraer el último
@@ -826,7 +831,8 @@ export const BoletinMedicion: React.FC = () => {
 
       const item = items[i];
       const existingInThisBoletin = editingId ? (savedBoletines.find(b => b.id === editingId)?.lines.find((l: any) => l.externalItemID === line.externalItemID)?.quantity || 0) : 0;
-      const paidByOthers = (item?.PaidQuantity || 0) - existingInThisBoletin;
+      const totalPaid = item?.PaidQuantity || 0;
+      const paidByOthers = (totalPaid >= existingInThisBoletin) ? (totalPaid - existingInThisBoletin) : totalPaid;
       const available = (item?.ReceivedQuantity || 0) - paidByOthers;
 
       if (line.quantity > (available + 0.0001)) {
@@ -1430,7 +1436,7 @@ export const BoletinMedicion: React.FC = () => {
       doc.setTextColor(100); // Restaurar color
     }
 
-    const tableColumn = ["Descripción", "Unidad", "Recepción", "Cantidad", "Precio Unit.", "ITBIS", "Retención", "Total"];
+    const tableColumn = ["Descripción", "Unidad", "Cantidad", "Precio Unit.", "ITBIS", "Total"];
     const tableRows = (boletin.lines || []).map((l: any, idx: number) => {
       const subtotal = l.quantity * l.unitPrice;
       const tax = subtotal * ((l.taxPercent || 0) / 100);
@@ -1454,11 +1460,9 @@ export const BoletinMedicion: React.FC = () => {
       return [
         l.description,
         unitDescription,
-        l.receptionNumbers || "",
         l.quantity,
         `$${formatCurrency(l.unitPrice)}`,
         `$${formatCurrency(tax)}`,
-        retentionText,
         `$${formatCurrency(lineTotal)}`
       ];
     });
@@ -1483,14 +1487,17 @@ export const BoletinMedicion: React.FC = () => {
     const labelX = 120;
     const valueX = 195;
 
+    const subTotal = Number(boletin.subTotal || 0);
+    const taxAmount = Number(boletin.taxAmount || 0);
+
     doc.text(`Subtotal:`, labelX, finalY);
-    doc.text(`$${formatCurrency(boletin.subTotal)}`, valueX, finalY, { align: 'right' });
+    doc.text(`$${formatCurrency(subTotal)}`, valueX, finalY, { align: 'right' });
 
     doc.text(`+ ITBIS:`, labelX, finalY + 6);
-    doc.text(`$${formatCurrency(boletin.taxAmount)}`, valueX, finalY + 6, { align: 'right' });
+    doc.text(`$${formatCurrency(taxAmount)}`, valueX, finalY + 6, { align: 'right' });
 
     // Total Bruto (antes de deducciones)
-    const totalBruto = boletin.subTotal + boletin.taxAmount;
+    const totalBruto = subTotal + taxAmount;
     doc.setLineWidth(0.5);
     doc.line(labelX, finalY + 10, valueX, finalY + 10);
     doc.setFont("helvetica", "bold");
@@ -1630,9 +1637,9 @@ export const BoletinMedicion: React.FC = () => {
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
     doc.text(`NETO A PAGAR:`, labelX, currentY + 9);
-    doc.text(`$${formatCurrency(boletin.netTotal)}`, valueX, currentY + 9, { align: 'right' });
+    doc.text(`$${formatCurrency(Number(boletin.netTotal))}`, valueX, currentY + 9, { align: 'right' });
 
-    // ===== SECCIÓN DE FIRMAS =====
+    // ===== SECCIÓN DE FIRMAS (Restaurada) =====
     const signatories: { name: string; role: string }[] = (() => {
       if (!boletin.signatures) return [];
       if (typeof boletin.signatures === 'string') {
@@ -1647,6 +1654,8 @@ export const BoletinMedicion: React.FC = () => {
       let sigY = currentY + 22;
       const pageHeight = doc.internal.pageSize.getHeight();
       const neededHeight = 30 + signatories.length * 22;
+      
+      // Nueva página si no cabe completo
       if (sigY + neededHeight > pageHeight - 15) {
         doc.addPage();
         sigY = 20;
@@ -1676,7 +1685,7 @@ export const BoletinMedicion: React.FC = () => {
         const x = margin + col * colWidth;
         const y = sigY + row * rowHeight;
 
-        // Nueva página si desbordamos
+        // Nueva página si desbordamos dentro del loop
         if (y + rowHeight > pageHeight - 15) {
           doc.addPage();
           sigY = 20;
@@ -1890,11 +1899,11 @@ export const BoletinMedicion: React.FC = () => {
                       // Solo sumar boletines que NO estén RECHAZADOS
                       const projectTotal = projectBoletines
                         .filter(b => b.status !== 'RECHAZADO')
-                        .reduce((sum, b) => sum + b.netTotal, 0);
+                        .reduce((sum, b) => sum + Number(b.netTotal), 0);
                       // Total de rechazados
                       const totalRechazado = projectBoletines
                         .filter(b => b.status === 'RECHAZADO')
-                        .reduce((sum, b) => sum + b.netTotal, 0);
+                        .reduce((sum, b) => sum + Number(b.netTotal), 0);
                       const isCollapsed = collapsedProjects.has(projectName);
 
                       // Contadores por estado
@@ -2463,7 +2472,8 @@ export const BoletinMedicion: React.FC = () => {
                   {linesToPay.map((line, idx) => {
                     const item = items[idx];
                     const existingInThisBoletin = editingId ? (savedBoletines.find(b => b.id === editingId)?.lines.find((l: any) => l.externalItemID === line.externalItemID)?.quantity || 0) : 0;
-                    const paidByOthers = (item?.PaidQuantity || 0) - existingInThisBoletin;
+                    const totalPaid = item?.PaidQuantity || 0;
+                    const paidByOthers = (totalPaid >= existingInThisBoletin) ? (totalPaid - existingInThisBoletin) : totalPaid;
                     const available = (item?.ReceivedQuantity || 0) - paidByOthers;
                     const isOverpaid = line.quantity > (available + 0.0001); // Margen por flotantes
                     const hasRegisteredMeasurement = (item?.ReceivedQuantity || 0) > 0;
@@ -2573,7 +2583,11 @@ export const BoletinMedicion: React.FC = () => {
                           </select>
                         </td>
                         <td style={{ textAlign: 'right', color: line.selected ? '#ff9800' : '#999', fontWeight: '500' }}>
-                          {line.selected ? `+$${formatCurrency((line.quantity * line.unitPrice) * (line.taxPercent / 100))}` : '$0.00'}
+                          {(() => {
+                            if (!line.selected) return '$0.00';
+                            const val = (line.quantity * line.unitPrice) * (line.taxPercent / 100);
+                            return val > 0.001 ? `+$${formatCurrency(val)}` : '$0.00';
+                          })()}
                         </td>
                         <td style={{ textAlign: 'center' }}>
                           <select
@@ -2619,7 +2633,11 @@ export const BoletinMedicion: React.FC = () => {
                           </select>
                         </td>
                         <td style={{ textAlign: 'right', paddingRight: '10px', color: line.selected ? '#d32f2f' : '#999', fontWeight: '500' }}>
-                          {line.selected ? `-${formatCurrency((line.quantity * line.unitPrice) * ((line.retentionPercent || 0) / 100))}` : '0.00'}
+                          {(() => {
+                            if (!line.selected) return '0.00';
+                            const val = (line.quantity * line.unitPrice) * ((line.retentionPercent || 0) / 100);
+                            return val > 0.001 ? `-${formatCurrency(val)}` : '0.00';
+                          })()}
                         </td>
                         <td style={{ textAlign: 'right', paddingRight: '10px', fontWeight: line.selected ? 'bold' : 'normal', color: line.selected ? '#000' : '#999' }}>
                           {line.selected ? `${formatCurrency(
@@ -2690,16 +2708,16 @@ export const BoletinMedicion: React.FC = () => {
                                 <input
                                   type="number"
                                   min="0" max="100"
-                                  value={selectedPref.percentage !== undefined ? selectedPref.percentage : 100}
+                                  value={Number((selectedPref.percentage !== undefined ? selectedPref.percentage : 100).toFixed(6))}
                                   onChange={(e) => {
                                     let val = Number(e.target.value);
                                     if (isNaN(val)) val = 0;
 
-                                    const otherAmortizations = totals.amortizations?.filter((a: any) => a.DocID !== pref.DocID).reduce((sum: number, a: any) => sum + a.Amount, 0) || 0;
+                                    const otherAmortizations = (totals.amortizations || []).filter((a: any) => a.DocID !== pref.DocID).reduce((sum: number, a: any) => sum + a.Amount, 0) || 0;
                                     const maxAllowedAmt = Math.max(0, totals.netBeforeAmortization - otherAmortizations);
-                                    const requestedAmt = pref.AvailableBalance * (val / 100);
+                                    let requestedAmt = pref.AvailableBalance * (val / 100);
 
-                                    if (requestedAmt > maxAllowedAmt) {
+                                    if (requestedAmt > (maxAllowedAmt + 0.01)) {
                                       alert(`No puede amortizar más del neto disponible de la factura ($${formatCurrency(maxAllowedAmt)}).`);
                                       val = (maxAllowedAmt / pref.AvailableBalance) * 100;
                                     }
@@ -2714,8 +2732,48 @@ export const BoletinMedicion: React.FC = () => {
                                 />
                               )}
                             </td>
-                            <td style={{ padding: '5px', textAlign: 'right', fontWeight: 'bold', color: isSelected ? '#d32f2f' : 'inherit' }}>
-                              {isSelected ? `$${formatCurrency(calculatedAmt)}` : '-'}
+                            <td style={{ padding: '5px', textAlign: 'right' }}>
+                              {isSelected ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={Number(calculatedAmt.toFixed(2))}
+                                  onChange={(e) => {
+                                    let val = Number(e.target.value);
+                                    if (isNaN(val)) val = 0;
+                                    
+                                    const otherAmortizations = (totals.amortizations || []).filter((a: any) => a.DocID !== pref.DocID).reduce((sum: number, a: any) => sum + a.Amount, 0) || 0;
+                                    const maxPayable = Math.max(0, totals.netBeforeAmortization - otherAmortizations);
+
+                                    if (val > pref.AvailableBalance) {
+                                      alert(`El monto no puede exceder el disponible del adelanto ($${formatCurrency(pref.AvailableBalance)})`);
+                                      val = pref.AvailableBalance;
+                                    }
+
+                                    if (val > (maxPayable + 0.01)) {
+                                      alert(`El monto excede el neto a pagar disponible ($${formatCurrency(maxPayable)})`);
+                                      val = maxPayable;
+                                    }
+                                    
+                                    // Calcular nuevo porcentaje
+                                    const newPercent = (val / pref.AvailableBalance) * 100;
+
+                                    setSelectedPrepayments(prev => prev.map(sp => 
+                                      (sp.DocID || sp.docID) === pref.DocID ? { ...sp, percentage: newPercent } : sp
+                                    ));
+                                  }}
+                                  style={{ 
+                                    width: '100px', 
+                                    textAlign: 'right', 
+                                    padding: '2px 4px', 
+                                    border: '1px solid #ccc', 
+                                    borderRadius: '4px',
+                                    fontWeight: 'bold', 
+                                    color: '#d32f2f'
+                                  }}
+                                />
+                              ) : '-'}
                             </td>
                           </tr>
                         );
