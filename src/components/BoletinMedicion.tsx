@@ -1375,20 +1375,29 @@ export const BoletinMedicion: React.FC = () => {
     });
 
     const doc = new jsPDF();
+    const primaryColor: [number, number, number] = [25, 118, 210]; // Azul #1976d2
 
-    // Header
-    doc.setFontSize(18);
+    // Header Color Strip
+    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.rect(0, 0, 210, 20, 'F');
+    doc.setFontSize(22);
+    doc.setTextColor(255, 255, 255);
+    doc.text("Boletín de Medición", 105, 13, { align: 'center' });
+    
+    // Reset text color for body
     doc.setTextColor(40);
-    doc.text("Boletín de Medición", 14, 22);
-
     doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`N° Boletín: ${boletin.docNumber}`, 14, 32);
 
-    // Mostrar Cubicación N° si existe (en vista previa puede ser (Por asignar))
+    doc.setFont("helvetica", "bold");
+    doc.text(`N° Boletín: ${boletin.docNumber}`, 14, 32);
+    doc.setFont("helvetica", "normal");
+    
+    // Mostrar Cubicación N° si existe
     const cubNo = boletin.cubicacionNo;
     if (cubNo !== undefined && cubNo !== null) {
-      doc.text(`Cubicación N°: ${cubNo}`, 80, 32);
+      doc.setFont("helvetica", "bold");
+      doc.text(`Cubicación N°: ${cubNo}`, 120, 32);
+      doc.setFont("helvetica", "normal");
     }
 
     // Validar fecha antes de formatear
@@ -1470,13 +1479,21 @@ export const BoletinMedicion: React.FC = () => {
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: currentHeaderY,
+      startY: currentHeaderY + 5,
       theme: 'grid',
       headStyles: {
-        fillColor: [255, 255, 255],
-        textColor: [0, 0, 0],
+        fillColor: primaryColor,
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
         lineWidth: 0.1,
-        lineColor: [0, 0, 0]
+        lineColor: primaryColor // Remove border or match bg
+      },
+      styles: {
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1,
+      },
+      alternateRowStyles: {
+        fillColor: [240, 248, 255] // AliceBlue
       }
     });
 
@@ -1498,18 +1515,23 @@ export const BoletinMedicion: React.FC = () => {
 
     // Total Bruto (antes de deducciones)
     const totalBruto = subTotal + taxAmount;
+    doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     doc.setLineWidth(0.5);
     doc.line(labelX, finalY + 10, valueX, finalY + 10);
     doc.setFont("helvetica", "bold");
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     doc.text(`Total Bruto:`, labelX, finalY + 15);
     doc.text(`$${formatCurrency(totalBruto)}`, valueX, finalY + 15, { align: 'right' });
     doc.setFont("helvetica", "normal");
+    doc.setTextColor(0);
 
     // Sección de Deducciones
     let currentY = finalY + 23;
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
+    doc.setTextColor(230, 81, 0); // Orange for deductions header
     doc.text(`Deducciones Aplicadas:`, labelX, currentY);
+    doc.setTextColor(0);
     doc.setFont("helvetica", "normal");
     currentY += 6;
 
@@ -1661,16 +1683,7 @@ export const BoletinMedicion: React.FC = () => {
         sigY = 20;
       }
 
-      // Separador y título
-      doc.setLineWidth(0.3);
-      doc.line(14, sigY, 196, sigY);
-      sigY += 6;
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(80);
-      doc.text('FIRMAS / APROBACIONES', 14, sigY);
-      sigY += 10;
-
+    
       // Columnas de firmas: máx 3 por fila
       const cols = Math.min(signatories.length, 3);
       const pageWidth = doc.internal.pageSize.getWidth();
