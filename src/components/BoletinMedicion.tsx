@@ -67,7 +67,7 @@ interface UnitOfMeasureData {
 }
 
 const formatCurrency = (num: number) => {
-  return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 const normalizeUnitOfMeasure = (value?: string | null) => (value || '').trim().toUpperCase();
@@ -1379,41 +1379,41 @@ export const BoletinMedicion: React.FC = () => {
 
     // Header Color Strip
     doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.rect(0, 0, 210, 20, 'F');
-    doc.setFontSize(22);
+    doc.rect(0, 0, 210, 10, 'F'); // Reducido de 15 a 10
+    doc.setFontSize(14); // Reducido de 18 a 14
     doc.setTextColor(255, 255, 255);
-    doc.text("Boletín de Medición", 105, 13, { align: 'center' });
-    
+    doc.text("Boletín de Medición", 105, 7, { align: 'center' }); // Ajustado Y de 10 a 7
+
     // Reset text color for body
     doc.setTextColor(40);
-    doc.setFontSize(11);
+    doc.setFontSize(9); // Reducido de 10 a 9 para compactar todo el documento
 
     doc.setFont("helvetica", "bold");
-    doc.text(`N° Boletín: ${boletin.docNumber}`, 14, 32);
+    doc.text(`N° Boletín: ${boletin.docNumber}`, 14, 18); // Subido más (de 22 a 18)
     doc.setFont("helvetica", "normal");
     
     // Mostrar Cubicación N° si existe
     const cubNo = boletin.cubicacionNo;
     if (cubNo !== undefined && cubNo !== null) {
       doc.setFont("helvetica", "bold");
-      doc.text(`Cubicación N°: ${cubNo}`, 120, 32);
+      doc.text(`Cubicación N°: ${cubNo}`, 120, 18); // Subido más (de 22 a 18)
       doc.setFont("helvetica", "normal");
     }
 
     // Validar fecha antes de formatear
     const fechaBoletin = boletin.date ? new Date(boletin.date) : new Date();
-    doc.text(`Fecha: ${fechaBoletin.toLocaleDateString('es-ES')}`, 14, 38);
-    doc.text(`OC Referencia: ${boletin.docID}`, 14, 44);
-    doc.text(`Proveedor: ${boletin.vendorName}`, 14, 50);
+    doc.text(`Fecha: ${fechaBoletin.toLocaleDateString('es-ES')}`, 14, 23); // Subido (de 28 a 23)
+    doc.text(`OC Referencia: ${boletin.docID}`, 14, 28); // Subido (de 34 a 28)
+    doc.text(`Proveedor: ${boletin.vendorName}`, 14, 33); // Subido (de 40 a 33)
 
     let currentHeaderY;
     if (boletin.vendorFiscalID) {
-      doc.text(`RNC/Cédula: ${boletin.vendorFiscalID}`, 14, 56);
-      doc.text(`Proyecto: ${boletin.projectName || 'General'}`, 14, 62);
-      currentHeaderY = 68;
+      doc.text(`RNC/Cédula: ${boletin.vendorFiscalID}`, 14, 38); // Subido drásticamente de 56 a 38
+      doc.text(`Proyecto: ${boletin.projectName || 'General'}`, 14, 43); // Subido de 62 a 43
+      currentHeaderY = 48; // Subido de 68 a 48
     } else {
-      doc.text(`Proyecto: ${boletin.projectName || 'General'}`, 14, 56);
-      currentHeaderY = 62;
+      doc.text(`Proyecto: ${boletin.projectName || 'General'}`, 14, 38);
+      currentHeaderY = 43;
     }
 
     if (boletin.measurementStartDate && boletin.measurementEndDate) {
@@ -1421,26 +1421,26 @@ export const BoletinMedicion: React.FC = () => {
       const startDate = new Date(boletin.measurementStartDate.split('T')[0] + 'T12:00:00').toLocaleDateString('es-ES');
       const endDate = new Date(boletin.measurementEndDate.split('T')[0] + 'T12:00:00').toLocaleDateString('es-ES');
       doc.text(`Periodo: Desde ${startDate} y hasta ${endDate}`, 14, currentHeaderY);
-      currentHeaderY += 6;
+      currentHeaderY += 5; // Reducido de 6 a 5
     }
 
     if (boletin.receptionNumbers) {
       doc.text(`Recepciones: ${boletin.receptionNumbers}`, 14, currentHeaderY);
-      currentHeaderY += 6;
+      currentHeaderY += 5; // Reducido de 6 a 5
     }
 
     // Mostrar estado y motivo de rechazo si aplica
     if (boletin.status === 'RECHAZADO' && boletin.rejectionReason) {
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       doc.setTextColor(211, 47, 47); // Color rojo
       doc.text(`ESTADO: RECHAZADO`, 14, currentHeaderY);
-      currentHeaderY += 6;
+      currentHeaderY += 5;
 
       // Dividir el motivo en múltiples líneas si es muy largo
       const maxWidth = 180;
       const reasonLines = doc.splitTextToSize(`Motivo: ${boletin.rejectionReason}`, maxWidth);
       doc.text(reasonLines, 14, currentHeaderY);
-      currentHeaderY += (reasonLines.length * 5);
+      currentHeaderY += (reasonLines.length * 4); // Reducido de 5 a 4
 
       doc.setTextColor(100); // Restaurar color
     }
@@ -1449,57 +1449,53 @@ export const BoletinMedicion: React.FC = () => {
     const tableRows = (boletin.lines || []).map((l: any, idx: number) => {
       const subtotal = l.quantity * l.unitPrice;
       const tax = subtotal * ((l.taxPercent || 0) / 100);
-      const retention = subtotal * ((l.retentionPercent || 0) / 100);
-      const itbisRetention = tax * ((l.itbisRetentionPercent || 0) / 100);
-      const lineTotal = subtotal + tax - retention - itbisRetention;
+      const lineTotal = l.totalLine || (subtotal + tax); // Usar totalLine si existe
       const normalizedUnitCode = normalizeUnitOfMeasure(l.unitOfMeasure);
       const unitFromCatalog = availableUnits.find((u) => u.code === normalizedUnitCode);
       const unitDescription = unitFromCatalog?.name || unitFromCatalog?.description || l.unitOfMeasure || '-';
-
-      let retentionText = '';
-      if (l.retentionPercent > 0 || l.itbisRetentionPercent > 0) {
-        const parts = [];
-        if (l.retentionPercent > 0) parts.push(`${l.retentionPercent}%`);
-        if (l.itbisRetentionPercent > 0) parts.push(`ITBIS ${l.itbisRetentionPercent}%`);
-        retentionText = parts.join(', ');
-      } else {
-        retentionText = 'N/A';
-      }
 
       return [
         l.description,
         unitDescription,
         l.quantity,
-        `$${formatCurrency(l.unitPrice)}`,
-        `$${formatCurrency(tax)}`,
-        `$${formatCurrency(lineTotal)}`
+        `$${formatCurrency(Number(l.unitPrice))}`,
+        `$${formatCurrency(Number(tax))}`,
+        `$${formatCurrency(Number(lineTotal))}`
       ];
     });
 
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: currentHeaderY + 5,
+      startY: currentHeaderY + 3, // Reducido de 5 a 3
       theme: 'grid',
+      styles: {
+        fontSize: 8, // Reducido de defecto para ganar espacio
+        cellPadding: 2, // Más compacto
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1,
+      },
       headStyles: {
         fillColor: primaryColor,
         textColor: [255, 255, 255],
         fontStyle: 'bold',
-        lineWidth: 0.1,
-        lineColor: primaryColor // Remove border or match bg
-      },
-      styles: {
-        lineColor: [200, 200, 200],
-        lineWidth: 0.1,
       },
       alternateRowStyles: {
-        fillColor: [240, 248, 255] // AliceBlue
+        fillColor: [240, 248, 255]
+      },
+      columnStyles: {
+        0: { cellWidth: 'auto', minCellWidth: 60 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 15 },
+        3: { cellWidth: 25 },
+        4: { cellWidth: 25 },
+        5: { cellWidth: 25 },
       }
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    const finalY = (doc as any).lastAutoTable.finalY + 5; // Reducido de 10 a 5
 
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setTextColor(0);
     const labelX = 120;
     const valueX = 195;
@@ -1510,30 +1506,30 @@ export const BoletinMedicion: React.FC = () => {
     doc.text(`Subtotal:`, labelX, finalY);
     doc.text(`$${formatCurrency(subTotal)}`, valueX, finalY, { align: 'right' });
 
-    doc.text(`+ ITBIS:`, labelX, finalY + 6);
-    doc.text(`$${formatCurrency(taxAmount)}`, valueX, finalY + 6, { align: 'right' });
+    doc.text(`+ ITBIS:`, labelX, finalY + 5);
+    doc.text(`$${formatCurrency(taxAmount)}`, valueX, finalY + 5, { align: 'right' });
 
     // Total Bruto (antes de deducciones)
     const totalBruto = subTotal + taxAmount;
     doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.setLineWidth(0.5);
-    doc.line(labelX, finalY + 10, valueX, finalY + 10);
+    doc.setLineWidth(0.4);
+    doc.line(labelX, finalY + 8, valueX, finalY + 8);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.text(`Total Bruto:`, labelX, finalY + 15);
-    doc.text(`$${formatCurrency(totalBruto)}`, valueX, finalY + 15, { align: 'right' });
+    doc.text(`Total Bruto:`, labelX, finalY + 12);
+    doc.text(`$${formatCurrency(totalBruto)}`, valueX, finalY + 12, { align: 'right' });
     doc.setFont("helvetica", "normal");
     doc.setTextColor(0);
 
     // Sección de Deducciones
-    let currentY = finalY + 23;
-    doc.setFontSize(10);
+    let currentY = finalY + 18; // Reducido de 23 a 18
+    doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(230, 81, 0); // Orange for deductions header
+    doc.setTextColor(230, 81, 0); 
     doc.text(`Deducciones Aplicadas:`, labelX, currentY);
     doc.setTextColor(0);
     doc.setFont("helvetica", "normal");
-    currentY += 6;
+    currentY += 5;
 
     // Calcular y agrupar retenciones por línea por tipo y porcentaje
     const retentionsByType: { [key: string]: { percent: number; amount: number } } = {};
@@ -1673,14 +1669,14 @@ export const BoletinMedicion: React.FC = () => {
     })();
 
     if (signatories.length > 0) {
-      let sigY = currentY + 22;
+      let sigY = currentY + 28; // Reducido de 32 a 28 para ahorrar una línea clave
       const pageHeight = doc.internal.pageSize.getHeight();
-      const neededHeight = 30 + signatories.length * 22;
+      const neededHeight = 22 + signatories.length * 12; // Margen de seguridad más ajustado de 25 a 22
       
-      // Nueva página si no cabe completo
-      if (sigY + neededHeight > pageHeight - 15) {
+      // Nueva página si no cabe el bloque de firmas con el nuevo espacio
+      if (sigY + neededHeight > pageHeight - 12) {
         doc.addPage();
-        sigY = 20;
+        sigY = 25; // Margen superior en nueva página
       }
 
     
@@ -1690,7 +1686,7 @@ export const BoletinMedicion: React.FC = () => {
       const margin = 14;
       const colWidth = (pageWidth - margin * 2) / cols;
       const lineLen = colWidth * 0.75;
-      const rowHeight = 28;
+      const rowHeight = 18; // Reducido de 20 a 18 para ganar espacio vertical
 
       for (let i = 0; i < signatories.length; i++) {
         const col = i % cols;
@@ -1699,25 +1695,25 @@ export const BoletinMedicion: React.FC = () => {
         const y = sigY + row * rowHeight;
 
         // Nueva página si desbordamos dentro del loop
-        if (y + rowHeight > pageHeight - 15) {
+        if (y + rowHeight > pageHeight - 10) {
           doc.addPage();
-          sigY = 20;
+          sigY = 25;
         }
 
-        doc.setLineWidth(0.5);
+        doc.setLineWidth(0.3); // Línea más fina
         doc.setTextColor(0);
-        doc.line(x, y + 10, x + lineLen, y + 10);
+        doc.line(x, y + 5, x + lineLen, y + 5); 
 
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        doc.text(signatories[i].name, x, y + 15);
+        doc.setFontSize(7.5); // Una pizca más pequeño para ahorrar espacio (de 8 a 7.5)
+        doc.text(signatories[i].name, x, y + 9); 
 
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
-        doc.setTextColor(100);
+        doc.setFontSize(6.5); // Una pizca más pequeño para ahorrar espacio (de 7 a 6.5)
+        doc.setTextColor(80); 
         // Ajustar texto si es muy largo
         const roleLines = doc.splitTextToSize(signatories[i].role || '', colWidth - 5);
-        doc.text(roleLines, x, y + 20);
+        doc.text(roleLines, x, y + 13); 
         doc.setTextColor(0);
       }
     }
@@ -1884,9 +1880,15 @@ export const BoletinMedicion: React.FC = () => {
                 );
               }
 
+              // Aplicar ordenamiento descendente por fecha para ambas vistas
+              filteredBoletines = [...filteredBoletines].sort((a, b) =>
+                new Date(b.date).getTime() - new Date(a.date).getTime()
+              );
+
               if (groupByProject) {
                 // Agrupar por proyecto
                 const groupedByProject: { [key: string]: any[] } = {};
+
                 filteredBoletines.forEach(b => {
                   const projectName = b.projectName || 'Sin Proyecto';
                   if (!groupedByProject[projectName]) {
@@ -1987,7 +1989,7 @@ export const BoletinMedicion: React.FC = () => {
                                     <th style={{ minWidth: '180px', width: '18%' }}>PROVEEDOR</th>
                                     <th style={{ minWidth: '140px', width: '12%', textAlign: 'right' }}>NETO PAGADO</th>
                                     <th style={{ minWidth: '120px', width: '10%', textAlign: 'center' }}>ESTADO</th>
-                                    <th style={{ minWidth: '280px', width: '23%', textAlign: 'center' }}>ACCIONES</th>
+                                    <th style={{ minWidth: '320px', width: '23%', textAlign: 'center' }}>ACCIONES</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -2017,11 +2019,15 @@ export const BoletinMedicion: React.FC = () => {
                                           </div>
                                         )}
                                       </td>
-                                      <td style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '1rem', color: '#28a745' }}>${formatCurrency(b.netTotal)}</td>
+                                      <td style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '1rem', color: '#28a745', whiteSpace: 'nowrap' }}>
+                                        ${formatCurrency(Number(b.netTotal))}
+                                      </td>
                                       <td style={{ textAlign: 'center' }}>
-                                        <span className={`status-badge-large status-${b.status.toLowerCase()}`}>
-                                          {b.status}
-                                        </span>
+                                        <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                          <span className={`status-badge-large status-${b.status.toLowerCase()}`}>
+                                            {b.status}
+                                          </span>
+                                        </div>
                                         {b.status === 'RECHAZADO' && b.rejectionReason && (
                                           <div style={{
                                             marginTop: '8px',
@@ -2110,11 +2116,13 @@ export const BoletinMedicion: React.FC = () => {
                             <td><div style={{ fontSize: '0.85rem', color: '#666' }}>{b.docID}</div></td>
                             <td className="project-cell-large">{b.projectName || 'Sin Proyecto'}</td>
                             <td className="vendor-cell-large">{b.vendorName}</td>
-                            <td style={{ textAlign: 'right', fontWeight: '700', color: '#28a745', fontSize: '1rem' }}>
-                              ${formatCurrency(b.netTotal)}
+                            <td style={{ textAlign: 'right', fontWeight: '700', color: '#28a745', fontSize: '1rem', whiteSpace: 'nowrap' }}>
+                              ${formatCurrency(Number(b.netTotal))}
                             </td>
                             <td style={{ textAlign: 'center' }}>
-                              <span className={`status-badge status-${b.status.toLowerCase()}`}>{b.status}</span>
+                              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                <span className={`status-badge status-${b.status.toLowerCase()}`}>{b.status}</span>
+                              </div>
                             </td>
                             <td>
                               <div className="action-buttons-container-large">
@@ -3038,6 +3046,7 @@ export const BoletinMedicion: React.FC = () => {
           top: 0;
           z-index: 10;
           box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          text-align: center;
         }
         
         .history-table tbody td { 
@@ -3125,17 +3134,15 @@ export const BoletinMedicion: React.FC = () => {
           display: flex; 
           gap: 10px; 
           align-items: center; 
-          justify-content: center;
-          flex-wrap: wrap;
+          justify-content: flex-start;
+          flex-wrap: nowrap;
         }
-        
-        .approval-group { display: flex; gap: 5px; border-left: 1px solid #ddd; padding-left: 8px; }
+
         .approval-group-large { 
           display: flex; 
           gap: 8px; 
           border-left: 2px solid #e0e0e0; 
           padding-left: 10px; 
-          margin-left: 4px;
         }
         
         .btn-action { 
